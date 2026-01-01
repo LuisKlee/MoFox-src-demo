@@ -2,7 +2,6 @@ import asyncio
 from collections import defaultdict
 from pathlib import Path
 import sys
-import time
 
 import pytest
 import pytest_asyncio

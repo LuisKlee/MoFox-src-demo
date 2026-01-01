@@ -11,9 +11,7 @@ Watchdog 全局任务监控器
 
 import asyncio
 import time
-import weakref
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, Optional, Set
 from collections import defaultdict
@@ -342,7 +340,7 @@ class Watchdog:
         print("Watchdog 状态报告")
         print("="*60)
         print(f"运行状态: {'运行中' if self._running else '已停止'}")
-        print(f"\n统计信息:")
+        print("\n统计信息:")
         print(f"  总注册任务: {stats['total_registered']}")
         print(f"  已完成: {stats['total_completed']}")
         print(f"  失败: {stats['total_failed']}")
@@ -352,7 +350,7 @@ class Watchdog:
         print(f"  当前跟踪: {stats['current_tracked']}")
         
         if running_tasks:
-            print(f"\n运行中的任务:")
+            print("\n运行中的任务:")
             for task_id, info in running_tasks.items():
                 print(f"  - {info.name} (ID: {task_id})")
                 print(f"    状态: {info.status.value}, 运行时长: {info.duration:.2f}s")

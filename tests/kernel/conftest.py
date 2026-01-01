@@ -3,7 +3,6 @@ kernel 层测试配置和 fixtures
 """
 
 import pytest
-from typing import AsyncGenerator
 
 
 @pytest.fixture
