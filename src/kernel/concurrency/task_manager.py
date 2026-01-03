@@ -19,7 +19,7 @@ from typing import Any, Callable, Coroutine, Dict, List, Optional, Set
 from collections import defaultdict
 import logging
 
-from .watchdog import get_watchdog, TaskStatus
+from .watchdog import get_watchdog
 
 
 logger = logging.getLogger(__name__)
@@ -628,7 +628,7 @@ class TaskManager:
         print("="*60)
         print(f"运行状态: {'运行中' if self._running else '已停止'}")
         print(f"最大并发数: {self.max_concurrent_tasks}")
-        print(f"\n统计信息:")
+        print("\n统计信息:")
         print(f"  总提交任务: {stats['total_submitted']}")
         print(f"  已完成: {stats['total_completed']}")
         print(f"  失败: {stats['total_failed']}")
@@ -641,7 +641,7 @@ class TaskManager:
         # 显示运行中的任务
         running_tasks = self.get_tasks_by_state(TaskState.RUNNING)
         if running_tasks:
-            print(f"\n运行中的任务:")
+            print("\n运行中的任务:")
             for task_id, task in running_tasks.items():
                 print(f"  - {task.name} (ID: {task_id})")
                 print(f"    优先级: {task.config.priority.name}, "
