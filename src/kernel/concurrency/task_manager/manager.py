@@ -7,10 +7,10 @@ TaskManager 任务管理器
 import asyncio
 import time
 import logging
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import Any, Callable, Coroutine, Dict, Optional
 from collections import defaultdict
 
-from .models import TaskPriority, TaskState, TaskConfig, ManagedTask
+from .models import TaskState, TaskConfig, ManagedTask
 from .scheduler import TaskScheduler
 from .executor import TaskExecutor
 from .dependency import DependencyManager

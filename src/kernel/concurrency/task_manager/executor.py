@@ -7,7 +7,7 @@
 import asyncio
 import time
 import logging
-from typing import Callable, Optional, Any
+from typing import Callable, Optional
 
 from .models import ManagedTask, TaskState
 

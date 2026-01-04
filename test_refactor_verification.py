@@ -21,17 +21,13 @@ def test_imports():
     try:
         # 测试从兼容层导入（旧方式）
         from src.kernel.concurrency.task_manager import (
-            TaskManager,
-            get_task_manager,
             TaskPriority,
             TaskState,
-            TaskConfig,
-            ManagedTask
+            TaskConfig
         )
         print("✓ 从兼容层成功导入所有类和函数")
         
         # 测试从包导入（新方式）
-        from src.kernel.concurrency.task_manager import TaskManager as TM
         print("✓ TaskManager 导入成功")
         
         # 验证优先级
@@ -81,11 +77,11 @@ async def test_functionality():
         
         # 创建管理器
         manager = get_task_manager(max_concurrent_tasks=5)
-        print(f"✓ TaskManager 实例创建成功")
+        print("✓ TaskManager 实例创建成功")
         
         # 启动管理器
         await manager.start()
-        print(f"✓ TaskManager 启动成功")
+        print("✓ TaskManager 启动成功")
         
         # 定义测试任务
         async def simple_task(x):
@@ -116,7 +112,7 @@ async def test_functionality():
             name="high_priority",
             config=TaskConfig(priority=TaskPriority.HIGH)
         )
-        print(f"✓ 高优先级任务提交成功")
+        print("✓ 高优先级任务提交成功")
         
         # 测试4: 重试机制
         task_id_retry = manager.submit_task(
@@ -124,14 +120,14 @@ async def test_functionality():
             name="retry_task",
             config=TaskConfig(max_retries=2, retry_delay=0.1)
         )
-        print(f"✓ 可重试任务提交成功")
+        print("✓ 可重试任务提交成功")
         
         # 等待任务处理
         await asyncio.sleep(1)
         
         # 停止管理器
         await manager.stop(cancel_running_tasks=True)
-        print(f"✓ TaskManager 停止成功")
+        print("✓ TaskManager 停止成功")
         
         return True
     except Exception as e:

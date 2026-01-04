@@ -8,7 +8,7 @@ import asyncio
 import logging
 from typing import Dict
 
-from .models import TaskPriority, TaskState, ManagedTask
+from .models import TaskPriority, ManagedTask
 
 logger = logging.getLogger(__name__)
 
