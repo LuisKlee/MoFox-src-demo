@@ -1,4 +1,5 @@
-"""Session helpers built on top of SQLAlchemy."""
+"""基于 SQLAlchemy 构建的会话助手
+Session helpers built on top of SQLAlchemy."""
 
 from __future__ import annotations
 
@@ -11,7 +12,8 @@ from .exceptions import SessionError
 
 
 class SessionManager:
-    """Creates and manages database sessions for a given engine."""
+    """为给定引擎创建和管理数据库会话
+    Creates and manages database sessions for a given engine."""
 
     def __init__(self, engine) -> None:
         try:
@@ -26,7 +28,8 @@ class SessionManager:
 
     @contextmanager
     def session_scope(self) -> Iterator[Session]:
-        """Provide a transactional scope around a series of operations."""
+        """为一系列操作提供事务作用域
+        Provide a transactional scope around a series of operations."""
 
         session: Session = self._session_factory()
         try:
