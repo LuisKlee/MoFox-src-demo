@@ -207,6 +207,78 @@ class AsyncHandler(logging.Handler):
         super().close()
 
 
+class LogStoreHandler(logging.Handler):
+    """日志存储处理器 - 将日志直接写入到 Storage 的 LogStore"""
+    
+    def __init__(
+        self,
+        log_store,  # kernel.storage.LogStore 实例
+        level: int = logging.DEBUG,
+        include_metadata: bool = True,
+        include_exc_info: bool = True
+    ):
+        """
+        初始化日志存储处理器
+        
+        Args:
+            log_store: LogStore 实例（来自 kernel.storage 模块）
+            level: 日志级别
+            include_metadata: 是否包含上下文元数据（request_id, user_id等）
+            include_exc_info: 是否包含异常信息
+        """
+        super().__init__()
+        self.log_store = log_store
+        self.setLevel(level)
+        self.include_metadata = include_metadata
+        self.include_exc_info = include_exc_info
+    
+    def emit(self, record: logging.LogRecord):
+        """
+        发送日志记录到 LogStore
+        
+        Args:
+            record: 日志记录对象
+        """
+        try:
+            # 构建日志条目
+            log_entry = {
+                'level': record.levelname,
+                'logger': record.name,
+                'message': record.getMessage(),
+                'module': record.module,
+                'function': record.funcName,
+                'line': record.lineno
+            }
+            
+            # 添加元数据
+            if self.include_metadata:
+                try:
+                    from .metadata import LogMetadata
+                    log_entry['request_id'] = LogMetadata.get_request_id()
+                    log_entry['session_id'] = LogMetadata.get_session_id()
+                    log_entry['user_id'] = LogMetadata.get_user_id()
+                    custom = LogMetadata.get_custom()
+                    if custom:
+                        log_entry['metadata'] = custom
+                except (ImportError, AttributeError):
+                    pass
+            
+            # 添加异常信息
+            if self.include_exc_info and record.exc_info:
+                import traceback
+                exc_text = ''.join(traceback.format_exception(*record.exc_info))
+                log_entry['exception'] = {
+                    'type': record.exc_info[0].__name__,
+                    'message': str(record.exc_info[1]),
+                    'traceback': exc_text
+                }
+            
+            # 写入到 LogStore
+            self.log_store.add_log(log_entry)
+        except Exception:
+            self.handleError(record)
+
+
 class NullHandler(logging.NullHandler):
     """空日志处理器（什么都不做）"""
     

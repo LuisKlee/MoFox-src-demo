@@ -11,13 +11,51 @@
 - 📦 **压缩支持**：内置gzip压缩功能
 - 🎯 **类型专用**：针对字典、列表、日志等不同场景的专用存储器
 - 🛡️ **异常处理**：完善的异常体系，便于错误处理
+- 📝 **Logger 集成**：与 Logger 模块无缝集成，日志直接存储为 JSON
 
 ## 安装
 
 ```python
 # 已集成在 MoFox kernel 层
 from kernel.storage import JSONStore, DictJSONStore, ListJSONStore, LogStore
+from kernel.logger.storage_integration import LoggerWithStorage  # Logger 集成
 ```
+
+## 🎯 新功能：与 Logger 集成（推荐）
+
+Storage 模块现已与 Logger 模块深度集成！应用程序的所有日志都可以自动存储为 JSON 格式：
+
+```python
+from kernel.logger.storage_integration import LoggerWithStorage
+
+# 一行代码启动 Logger + Storage 集成
+logger_system = LoggerWithStorage(app_name="myapp")
+
+# 获取日志器
+logger = logger_system.get_logger("app.main")
+
+# 记录日志（自动保存到 JSON）
+logger.info("应用启动")
+logger.error("发生错误")
+
+# 查询日志
+stats = logger_system.get_logs(days=1)
+errors = logger_system.get_error_logs(days=7)
+```
+
+**集成优势：**
+- ✅ 日志自动存储为 JSON 格式
+- ✅ 自动元数据提取（request_id, session_id, user_id）
+- ✅ 完整的异常堆栈跟踪
+- ✅ 灵活的日志查询和过滤
+- ✅ 同时支持控制台和文件存储
+
+**查看更多：**
+- 📖 [Logger-Storage 集成指南](../../docs/kernel/logger/LOGGER_STORAGE_INTEGRATION.md)
+- 🚀 [快速参考](../../docs/kernel/logger/QUICK_REFERENCE.md)
+- 💻 [集成示例](../logger/storage_integration.py)
+
+---
 
 ## 快速开始
 

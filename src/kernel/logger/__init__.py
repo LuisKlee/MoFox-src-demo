@@ -94,6 +94,7 @@ from .handlers import (
     TimedFileHandler,
     ErrorFileHandler,
     AsyncHandler,
+    LogStoreHandler,
     NullHandler,
 )
 
@@ -146,6 +147,7 @@ __all__ = [
     'TimedFileHandler',
     'ErrorFileHandler',
     'AsyncHandler',
+    'LogStoreHandler',
     'NullHandler',
 ]
 

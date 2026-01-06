@@ -11,8 +11,38 @@ MoFox 的统一日志系统，提供强大、灵活、易用的日志记录功�
 - ⚡ **异步日志**：避免IO阻塞主线程
 - 🔧 **灵活配置**：开发/生产/测试环境预设配置
 - 🎯 **单例模式**：全局统一的日志管理
+- 💾 **存储集成**：与 Storage 模块无缝集成，日志直接存储为 JSON
 
 ## 快速开始
+
+### 💡 新建议：使用 Storage 集成（推荐）
+
+Logger 现已与 Storage 模块深度集成，能够将日志直接存储为 JSON 格式，便于后续查询和分析：
+
+```python
+from kernel.logger.storage_integration import LoggerWithStorage
+
+# 一行代码启动 Logger + Storage 集成
+logger_system = LoggerWithStorage(app_name="myapp")
+
+# 获取日志器
+logger = logger_system.get_logger("app.main")
+
+# 记录日志（自动保存到 JSON）
+logger.info("应用启动")
+logger.error("发生错误")
+
+# 查询日志
+stats = logger_system.get_logs(days=1)
+errors = logger_system.get_error_logs(days=1)
+```
+
+更多信息请查看：
+- 📖 [Logger-Storage 集成指南](../../docs/kernel/logger/LOGGER_STORAGE_INTEGRATION.md)
+- 🚀 [快速参考](../../docs/kernel/logger/QUICK_REFERENCE.md)
+- 💻 [集成示例代码](./storage_integration.py)
+
+---
 
 ### 基本使用
 
@@ -298,18 +328,62 @@ cleaner = create_auto_cleaner(max_age_days=30)
 schedule.every().day.at("03:00").do(cleaner.run)
 ```
 
+## 与 Storage 集成
+
+### 简介
+
+Logger 现已支持与 Storage 模块集成，实现以下功能：
+
+- ✅ 日志自动存储为 JSON 格式
+- ✅ 自动元数据提取（request_id, session_id, user_id）
+- ✅ 完整的异常堆栈跟踪
+- ✅ 灵活的日志查询和过滤
+- ✅ 自动日志轮转和清理
+- ✅ 同时支持控制台和文件存储
+
+### 集成三种方式
+
+**方式 1：最简单（推荐）**
+```python
+from kernel.logger.storage_integration import LoggerWithStorage
+logger_system = LoggerWithStorage(app_name="myapp")
+```
+
+**方式 2：手动配置**
+```python
+from kernel.logger import setup_logger, LogStoreHandler
+from kernel.storage import LogStore
+
+log_store = LogStore(directory="logs")
+handler = LogStoreHandler(log_store)
+setup_logger()  # 然后添加处理器
+```
+
+**方式 3：仅控制台（不存储）**
+```python
+from kernel.logger import setup_logger
+setup_logger()  # 保持原有行为
+```
+
+### 查看更多
+
+- 📖 [完整集成指南](../../docs/kernel/logger/LOGGER_STORAGE_INTEGRATION.md)
+- 🚀 [快速参考和代码片段](../../docs/kernel/logger/QUICK_REFERENCE.md)
+- 💻 [集成示例](./storage_integration.py)
+
 ## 模块结构
 
 ```
 kernel/logger/
-├── __init__.py          # 导出接口
-├── core.py              # 日志系统核心
-├── config.py            # 配置管理
-├── handlers.py          # 日志处理器
-├── renderers.py         # 格式化器
-├── metadata.py          # 元数据管理
-├── cleanup.py           # 清理功能
-└── example.py           # 使用示例
+├── __init__.py                  # 导出接口
+├── core.py                      # 日志系统核心
+├── config.py                    # 配置管理
+├── handlers.py                  # 日志处理器（包含 LogStoreHandler）
+├── renderers.py                 # 格式化器
+├── metadata.py                  # 元数据管理
+├── cleanup.py                   # 清理功能
+├── storage_integration.py       # Logger-Storage 集成包装器
+└── example.py                   # 使用示例
 ```
 
 ## API 参考
@@ -330,4 +404,43 @@ kernel/logger/
 - `error(message, logger_name, **kwargs)` - 记录ERROR日志
 - `critical(message, logger_name, **kwargs)` - 记录CRITICAL日志
 - `exception(message, logger_name, **kwargs)` - 记录异常日志
+
+### Storage 集成 API
+
+**LoggerWithStorage 类**
+
+```python
+# 初始化
+logger_system = LoggerWithStorage(
+    app_name="myapp",           # 应用名称（必需）
+    log_dir="logs",             # 日志目录
+    console_output=True,        # 是否输出到控制台
+    json_storage=True           # 是否存储为 JSON
+)
+
+# 获取日志器
+logger = logger_system.get_logger("module.name")
+
+# 查询日志
+stats = logger_system.get_logs(days=1)          # 获取统计信息
+errors = logger_system.get_error_logs(days=7)  # 获取错误日志
+
+# 维护日志
+deleted = logger_system.cleanup_old_logs(days=30)  # 清理旧日志
+```
+
+**LogStoreHandler 类**
+
+```python
+# 创建处理器
+handler = LogStoreHandler(
+    log_store=log_store,        # LogStore 实例
+    level=logging.DEBUG,        # 日志级别
+    include_metadata=True,      # 包含元数据
+    include_exc_info=True       # 包含异常信息
+)
+
+# 添加到日志器
+logger.addHandler(handler)
+```
 
