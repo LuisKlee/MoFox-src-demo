@@ -6,7 +6,7 @@ from __future__ import annotations
 import functools
 import hashlib
 import json
-from typing import Any, Callable, Optional, Union
+from typing import Any, Callable, Optional
 
 from .backends import CacheBackend, LocalCache, RedisCache
 
