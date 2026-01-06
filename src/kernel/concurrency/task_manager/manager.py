@@ -17,7 +17,10 @@ from .dependency import DependencyManager
 from .callbacks import CallbackManager
 from ..watchdog import get_watchdog
 
-logger = logging.getLogger(__name__)
+# 使用 MoFox Logger
+from kernel.logger import get_logger, MetadataContext
+
+logger = get_logger(__name__)
 
 
 class TaskManager:
@@ -103,8 +106,12 @@ class TaskManager:
         self._scheduler_task = asyncio.create_task(self._scheduler_loop())
         
         logger.info(
-            f"TaskManager 已启动，最大并发数: {self.max_concurrent_tasks}, "
-            f"Watchdog: {'启用' if self.enable_watchdog else '禁用'}"
+            f"TaskManager 已启动",
+            extra={
+                'max_concurrent_tasks': self.max_concurrent_tasks,
+                'watchdog_enabled': self.enable_watchdog,
+                'watchdog_interval': self.watchdog_check_interval
+            }
         )
     
     async def stop(self, cancel_running_tasks: bool = False):
@@ -194,7 +201,19 @@ class TaskManager:
             managed_task.state = TaskState.QUEUED
             self._scheduler.enqueue_task(managed_task)
         
-        logger.debug(f"任务已提交: {managed_task.name} (ID: {task_id})")
+        # 使用元数据记录任务提交
+        with MetadataContext(task_id=task_id, task_name=managed_task.name):
+            logger.info(
+                f"任务已提交: {managed_task.name}",
+                extra={
+                    'task_id': task_id,
+                    'priority': task_config.priority.name,
+                    'has_dependencies': bool(task_config.dependencies),
+                    'state': managed_task.state.name,
+                    'timeout': task_config.timeout
+                }
+            )
+        
         return task_id
     
     async def _scheduler_loop(self):
@@ -271,11 +290,18 @@ class TaskManager:
         # 通过 watchdog_id 查找对应的 ManagedTask
         for task_id, managed_task in self._tasks.items():
             if managed_task.watchdog_id == watchdog_id:
-                logger.warning(
-                    f"[Watchdog] 检测到任务超时: {managed_task.name} "
-                    f"(ID: {task_id}), 超时时间: {task_info.timeout}s, "
-                    f"实际运行时长: {task_info.duration:.2f}s"
-                )
+                # 使用元数据记录超时
+                with MetadataContext(task_id=task_id, task_name=managed_task.name):
+                    logger.warning(
+                        f"[Watchdog] 检测到任务超时: {managed_task.name}",
+                        extra={
+                            'task_id': task_id,
+                            'watchdog_id': watchdog_id,
+                            'timeout': task_info.timeout,
+                            'duration': task_info.duration,
+                            'will_cancel': self.auto_cancel_on_timeout
+                        }
+                    )
                 
                 # 如果启用了自动取消超时任务，则取消该任务
                 if self.auto_cancel_on_timeout and managed_task.task and not managed_task.task.done():
@@ -295,11 +321,17 @@ class TaskManager:
         # 通过 watchdog_id 查找对应的 ManagedTask
         for task_id, managed_task in self._tasks.items():
             if managed_task.watchdog_id == watchdog_id:
-                logger.error(
-                    f"[Watchdog] 检测到任务错误: {managed_task.name} "
-                    f"(ID: {task_id}), 错误类型: {type(task_info.error).__name__}, "
-                    f"错误信息: {task_info.error}"
-                )
+                # 使用元数据记录错误
+                with MetadataContext(task_id=task_id, task_name=managed_task.name):
+                    logger.error(
+                        f"[Watchdog] 检测到任务错误: {managed_task.name}",
+                        extra={
+                            'task_id': task_id,
+                            'watchdog_id': watchdog_id,
+                            'error_type': type(task_info.error).__name__,
+                            'error_message': str(task_info.error)
+                        }
+                    )
                 break
     
     async def _on_task_success(self, managed_task: ManagedTask, result: Any):
@@ -309,10 +341,17 @@ class TaskManager:
         managed_task.end_time = time.time()
         self._stats['total_completed'] += 1
         
-        logger.debug(
-            f"任务完成: {managed_task.name} (ID: {managed_task.task_id}), "
-            f"耗时: {managed_task.duration:.2f}s"
-        )
+        # 使用元数据记录任务完成
+        with MetadataContext(task_id=managed_task.task_id, task_name=managed_task.name):
+            logger.info(
+                f"任务完成: {managed_task.name}",
+                extra={
+                    'task_id': managed_task.task_id,
+                    'duration': managed_task.duration,
+                    'retry_count': managed_task.retry_count,
+                    'result_type': type(result).__name__ if result is not None else None
+                }
+            )
         
         # 触发回调
         await self._callback_manager.call_complete_callbacks(managed_task)
@@ -334,10 +373,19 @@ class TaskManager:
             managed_task.state = TaskState.RETRYING
             self._stats['total_retries'] += 1
             
-            logger.warning(
-                f"任务失败，准备重试 ({managed_task.retry_count}/{managed_task.config.max_retries}): "
-                f"{managed_task.name}, 错误: {error}"
-            )
+            # 使用元数据记录重试
+            with MetadataContext(task_id=managed_task.task_id, task_name=managed_task.name):
+                logger.warning(
+                    f"任务失败，准备重试: {managed_task.name}",
+                    extra={
+                        'task_id': managed_task.task_id,
+                        'retry_count': managed_task.retry_count,
+                        'max_retries': managed_task.config.max_retries,
+                        'error_type': type(error).__name__,
+                        'error_message': str(error),
+                        'retry_delay': managed_task.config.retry_delay
+                    }
+                )
             
             # 延迟后重新加入队列
             await asyncio.sleep(managed_task.config.retry_delay)
@@ -352,10 +400,19 @@ class TaskManager:
             managed_task.state = TaskState.FAILED
             self._stats['total_failed'] += 1
             
-            logger.error(
-                f"任务失败: {managed_task.name} (ID: {managed_task.task_id}), "
-                f"错误: {error}"
-            )
+            # 使用元数据记录失败
+            with MetadataContext(task_id=managed_task.task_id, task_name=managed_task.name):
+                logger.error(
+                    f"任务失败: {managed_task.name}",
+                    extra={
+                        'task_id': managed_task.task_id,
+                        'error_type': type(error).__name__,
+                        'error_message': str(error),
+                        'duration': managed_task.duration,
+                        'retry_count': managed_task.retry_count
+                    },
+                    exc_info=True
+                )
             
             # 触发回调
             await self._callback_manager.call_failed_callbacks(managed_task)

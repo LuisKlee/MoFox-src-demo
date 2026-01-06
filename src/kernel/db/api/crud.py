@@ -10,6 +10,9 @@ from sqlalchemy.orm import Session
 
 from ..core.session import SessionManager
 from .query import QuerySpec, apply_query_spec
+from kernel.logger import get_logger, MetadataContext
+
+logger = get_logger(__name__)
 
 ModelT = TypeVar("ModelT")
 
@@ -42,27 +45,84 @@ class SQLAlchemyCRUDRepository(CRUDRepository[ModelT]):
 		self._session_manager = session_manager
 
 	def add(self, session: Session, obj: ModelT, *, flush: bool = False) -> ModelT:
+		model_name = type(obj).__name__
+		
 		session.add(obj)
 		if flush:
 			session.flush()
+		
+		logger.debug(
+			f"数据库添加操作: {model_name}",
+			extra={
+				'operation': 'add',
+				'model': model_name,
+				'flushed': flush
+			}
+		)
 		return obj
 
 	def get(self, session: Session, model: Type[ModelT], obj_id: Any) -> Optional[ModelT]:
-		return session.get(model, obj_id)
+		result = session.get(model, obj_id)
+		
+		logger.debug(
+			f"数据库查询操作: {model.__name__}",
+			extra={
+				'operation': 'get',
+				'model': model.__name__,
+				'id': obj_id,
+				'found': result is not None
+			}
+		)
+		return result
 
 	def list(self, session: Session, model: Type[ModelT], query_spec: Optional[QuerySpec] = None) -> Sequence[ModelT]:
 		stmt = select(model)
 		if query_spec:
 			stmt = apply_query_spec(stmt, query_spec)
-		return list(session.execute(stmt).scalars().all())
+		results = list(session.execute(stmt).scalars().all())
+		
+		logger.debug(
+			f"数据库列表查询: {model.__name__}",
+			extra={
+				'operation': 'list',
+				'model': model.__name__,
+				'has_query_spec': query_spec is not None,
+				'result_count': len(results),
+				'limit': query_spec.limit if query_spec else None,
+				'offset': query_spec.offset if query_spec else None
+			}
+		)
+		return results
 
 	def delete(self, session: Session, obj: ModelT) -> None:
+		model_name = type(obj).__name__
+		
 		session.delete(obj)
+		
+		logger.info(
+			f"数据库删除操作: {model_name}",
+			extra={
+				'operation': 'delete',
+				'model': model_name
+			}
+		)
 
 	def update_fields(self, session: Session, obj: ModelT, fields: dict[str, Any]) -> ModelT:
+		model_name = type(obj).__name__
+		
 		for key, value in fields.items():
 			setattr(obj, key, value)
 		session.flush()
+		
+		logger.info(
+			f"数据库更新操作: {model_name}",
+			extra={
+				'operation': 'update',
+				'model': model_name,
+				'fields_updated': list(fields.keys()),
+				'field_count': len(fields)
+			}
+		)
 		return obj
 
 	def session_scope(self):
@@ -80,22 +140,57 @@ class RedisRepository:
 		"""使用 Redis 客户端初始化
 		Initialize with a Redis client."""
 		self._client = redis_client
+		logger.info(
+			"Redis 仓库已初始化",
+			extra={'repository_type': 'redis'}
+		)
 
 	# 字符串操作 String operations
 	def set(self, key: str, value: Any, ex: Optional[int] = None) -> bool:
 		"""设置键值对，可选过期时间（秒）
 		Set a key-value pair with optional expiration time (seconds)."""
-		return self._client.set(key, value, ex=ex)
+		result = self._client.set(key, value, ex=ex)
+		
+		logger.debug(
+			f"Redis SET 操作: {key}",
+			extra={
+				'operation': 'set',
+				'key': key,
+				'expiration': ex,
+				'success': result
+			}
+		)
+		return result
 
 	def get(self, key: str) -> Optional[str]:
 		"""按键获取值
 		Get value by key."""
-		return self._client.get(key)
+		result = self._client.get(key)
+		
+		logger.debug(
+			f"Redis GET 操作: {key}",
+			extra={
+				'operation': 'get',
+				'key': key,
+				'found': result is not None
+			}
+		)
+		return result
 
 	def delete(self, *keys: str) -> int:
 		"""删除一个或多个键
 		Delete one or more keys."""
-		return self._client.delete(*keys)
+		count = self._client.delete(*keys)
+		
+		logger.info(
+			f"Redis DELETE 操作",
+			extra={
+				'operation': 'delete',
+				'keys': list(keys),
+				'deleted_count': count
+			}
+		)
+		return count
 
 	def exists(self, *keys: str) -> int:
 		"""检查键是否存在
@@ -202,6 +297,14 @@ class MongoDBRepository:
 		Initialize with a MongoDBEngine instance."""
 		self._engine = mongo_engine
 		self._db = mongo_engine.database
+		
+		logger.info(
+			"MongoDB 仓库已初始化",
+			extra={
+				'repository_type': 'mongodb',
+				'database': self._db.name
+			}
+		)
 
 	def collection(self, name: str):
 		"""按名称获取集合
@@ -212,17 +315,50 @@ class MongoDBRepository:
 	def insert_one(self, collection_name: str, document: dict) -> Any:
 		"""插入单个文档
 		Insert a single document."""
-		return self._db[collection_name].insert_one(document)
+		result = self._db[collection_name].insert_one(document)
+		
+		logger.debug(
+			f"MongoDB 插入文档: {collection_name}",
+			extra={
+				'operation': 'insert_one',
+				'collection': collection_name,
+				'inserted_id': str(result.inserted_id)
+			}
+		)
+		return result
 
 	def insert_many(self, collection_name: str, documents: list[dict]) -> Any:
 		"""插入多个文档
 		Insert multiple documents."""
-		return self._db[collection_name].insert_many(documents)
+		result = self._db[collection_name].insert_many(documents)
+		
+		logger.info(
+			f"MongoDB 批量插入: {collection_name}",
+			extra={
+				'operation': 'insert_many',
+				'collection': collection_name,
+				'document_count': len(documents),
+				'inserted_count': len(result.inserted_ids)
+			}
+		)
+		return result
 
 	def find_one(self, collection_name: str, filter: dict, projection: Optional[dict] = None) -> Optional[dict]:
 		"""查找单个文档
 		Find a single document."""
-		return self._db[collection_name].find_one(filter, projection)
+		result = self._db[collection_name].find_one(filter, projection)
+		
+		logger.debug(
+			f"MongoDB 查询单个文档: {collection_name}",
+			extra={
+				'operation': 'find_one',
+				'collection': collection_name,
+				'has_filter': bool(filter),
+				'has_projection': projection is not None,
+				'found': result is not None
+			}
+		)
+		return result
 
 	def find(self, collection_name: str, filter: dict, query_spec: Optional[QuerySpec] = None) -> list[dict]:
 		"""查找多个文档，可选查询规约
@@ -241,22 +377,52 @@ class MongoDBRepository:
 			if query_spec.offset:
 				cursor = cursor.skip(query_spec.offset)
 		
-		return list(cursor)
+		results = list(cursor)
+		
+		logger.debug(
+			f"MongoDB 查询多个文档: {collection_name}",
+			extra={
+				'operation': 'find',
+				'collection': collection_name,
+				'has_filter': bool(filter),
+				'has_query_spec': query_spec is not None,
+				'result_count': len(results),
+				'limit': query_spec.limit if query_spec else None
+			}
+		)
+		return results
 
 	def update_one(self, collection_name: str, filter: dict, update: dict, upsert: bool = False) -> Any:
 		"""更新单个文档
 		Update a single document."""
-		return self._db[collection_name].update_one(filter, update, upsert=upsert)
-
-	def update_many(self, collection_name: str, filter: dict, update: dict) -> Any:
-		"""更新多个文档
-		Update multiple documents."""
-		return self._db[collection_name].update_many(filter, update)
+		result = self._db[collection_name].update_one(filter, update, upsert=upsert)
+		
+		logger.info(
+			f"MongoDB 更新文档: {collection_name}",
+			extra={
+				'operation': 'update_one',
+				'collection': collection_name,
+				'matched_count': result.matched_count,
+				'modified_count': result.modified_count,
+				'upserted': upsert and result.upserted_id is not None
+			}
+		)
+		return result
 
 	def delete_one(self, collection_name: str, filter: dict) -> Any:
 		"""删除单个文档
 		Delete a single document."""
-		return self._db[collection_name].delete_one(filter)
+		result = self._db[collection_name].delete_one(filter)
+		
+		logger.info(
+			f"MongoDB 删除文档: {collection_name}",
+			extra={
+				'operation': 'delete_one',
+				'collection': collection_name,
+				'deleted_count': result.deleted_count
+			}
+		)
+		return result
 
 	def delete_many(self, collection_name: str, filter: dict) -> Any:
 		"""删除多个文档
