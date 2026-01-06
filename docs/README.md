@@ -11,10 +11,14 @@ docs/
 │   │   ├── watchdog.md
 │   │   └── task_manager.md
 │   ├── config/          # 配置系统
-│   ├── db/              # 数据库模块
-│   │   ├── core/        # 数据库核心
-│   │   ├── optimization/ # 数据库优化
-│   │   └── api/         # 数据库 API
+│   ├── db/              # 📘 数据库模块（完整指南）
+│   │   ├── README.md         # 📌 概览与快速开始
+│   │   ├── CACHE_GUIDE.md    # 缓存系统完整指南
+│   │   ├── DATABASE_GUIDE.md # 数据库选择与配置
+│   │   ├── OPTIMIZATION_GUIDE.md # 优化与架构设计
+│   │   ├── core/             # 数据库核心模块
+│   │   ├── optimization/     # 缓存与优化
+│   │   └── api/              # CRUD 与查询 API
 │   ├── llm/             # LLM 请求系统
 │   │   ├── model_client/ # 模型客户端
 │   │   └── payload/     # 请求负载
