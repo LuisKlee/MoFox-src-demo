@@ -1,8 +1,17 @@
 # MoFox 重构概览
 
-> 说明：本文件仅提供分层和目录的框架性概览，暂未包含具体实现或使用示例，可结合 [MoFox 重构指导总览.md](MoFox%20重构指导总览.md) 查看更详细的设计描述。
->
-> 当前为测试状态不保证稳定性。
+> **kernel 层已达到最低可用标准** ✅
+> 
+> ✅ kernel 层已完成以下模块的实现：
+> - **config**：灵活的配置管理（支持 JSON/YAML/ENV/Python 多种格式）
+> - **vector_db**：向量存储抽象与 ChromaDB 实现
+> - **llm**：完整的 LLM 请求系统（OpenAI/Gemini/Bedrock 多提供商支持）
+> - **logger**：集中式日志管理
+> - **concurrency**：异步任务管理与 watchdog
+> - **db**：数据库接口与核心功能
+> - **storage**：JSON 本地持久化
+
+> 可结合 [MoFox 重构指导总览.md](MoFox%20重构指导总览.md) 查看详细的设计描述。
 
 ## 分层设计
 - **kernel**：与具体业务无关的基础能力，包括配置、数据库、向量库、LLM 请求、日志、并发、存储等。
@@ -16,14 +25,57 @@ src/
   core/
 ```
 
-## kernel 模块一览
-- **db**：数据库接口与核心（dialect 适配、engine、session、异常）；优化模块含多级缓存（cache backend/local/redis 与 cache_manager）；API 提供 CRUD 与 Query 入口。
-- **vector_db**：向量存储抽象与 chromadb 实现，入口工厂初始化服务实例。
-- **config**：配置基类与读取、修改、更新的实现。
-- **llm**：LLM 请求系统（utils、llm_request、异常、client 注册）；clients 包含 base、aiohttp gemini、bedrock、openai；payload 包含 message、resp_format、tool_option、standard_prompt。
-- **logger**：日志入口、清理、元数据、格式化器、配置与处理器（console/file）。
-- **concurrency**：异步任务管理与全局 watchdog。
-- **storage**：JSON 本地持久化操作器。
+## kernel 模块一览（✅ 已完成）
+
+### 已实现的模块
+
+#### **config** - 灵活的配置管理
+- 支持多种格式：JSON、YAML、ENV、Python
+- BaseConfig 抽象基类，Config 具体实现
+- ConfigManager 统一管理多个配置实例
+- ConfigLoader 支持自动格式检测
+- 内置验证、合并、热重载等高级功能
+- 📚 文档：[README](docs/kernel/config/README.md) | [API](docs/kernel/config/API_REFERENCE.md) | [最佳实践](docs/kernel/config/BEST_PRACTICES.md)
+
+#### **vector_db** - 向量存储
+- 向量存储抽象基类 VectorDBBase
+- ChromaDB 完整实现（支持持久化/内存/HTTP 客户端）
+- 工厂函数和单例注册表
+- 完整的 CRUD 操作与相似度搜索
+- 📚 文档：[README](docs/kernel/vector_db/README.md) | [API](docs/kernel/vector_db/API_REFERENCE.md) | [日志集成](docs/kernel/vector_db/LOGGING_GUIDE.md)
+
+#### **llm** - LLM 请求系统
+- 多提供商支持（OpenAI、Google Gemini、AWS Bedrock）
+- BaseLLMClient 抽象基类与完整实现
+- ClientRegistry 客户端注册与缓存
+- 消息构建、工具调用、响应解析
+- 流式请求、多模态支持
+- 📚 文档：[README](docs/kernel/llm/README.md) | [API](docs/kernel/llm/API_REFERENCE.md) | [最佳实践](docs/kernel/llm/BEST_PRACTICES.md)
+
+#### **logger** - 日志管理
+- 集中式日志入口
+- 日志清理、元数据管理
+- 支持控制台与文件处理器
+- 自定义格式化器与配置
+- 📚 文档：[README](docs/kernel/logger/README.md) | [API](docs/kernel/logger/API_REFERENCE.md)
+
+#### **concurrency** - 异步任务管理
+- 任务管理器 TaskManager
+- 全局 watchdog 监控
+- 异步任务生命周期管理
+- 📚 文档：[README](docs/kernel/concurrency/README.md) | [任务管理](docs/kernel/concurrency/task_manager.md)
+
+#### **db** - 数据库接口
+- Dialect 适配、Engine、Session
+- 多级缓存系统（local/redis）
+- CRUD 与 Query 操作接口
+- 异常处理体系
+- 📚 文档：[README](docs/kernel/db/README.md) | [数据库指南](docs/kernel/db/DATABASE_GUIDE.md)
+
+#### **storage** - 本地持久化
+- JSON 格式存储
+- 异步 I/O 支持
+- 📚 文档：[README](docs/kernel/storage/README.md) | [API](docs/kernel/storage/API_REFERENCE.md)
 
 ## core 模块一览
 - **components**：
