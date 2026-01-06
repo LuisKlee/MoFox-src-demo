@@ -16,6 +16,11 @@ from enum import Enum
 from typing import Any, Callable, Dict, Optional, Set
 from collections import defaultdict
 
+# 使用 MoFox Logger
+from kernel.logger import get_logger, MetadataContext
+
+logger = get_logger(__name__)
+
 
 class TaskStatus(Enum):
     """任务状态枚举"""
@@ -169,6 +174,17 @@ class Watchdog:
         # 为任务添加完成回调
         task.add_done_callback(lambda t: self._on_task_done(task_id, t))
         
+        # 记录任务注册
+        with MetadataContext(task_id=task_id, task_name=task_info.name):
+            logger.debug(
+                f"任务已注册到 Watchdog: {task_info.name}",
+                extra={
+                    'task_id': task_id,
+                    'timeout': task_info.timeout,
+                    'metadata': task_info.metadata
+                }
+            )
+        
         return task_id
     
     def unregister_task(self, task_id: str) -> bool:
@@ -257,36 +273,70 @@ class Watchdog:
         if task.cancelled():
             task_info.status = TaskStatus.CANCELLED
             self._stats['total_cancelled'] += 1
+            
+            with MetadataContext(task_id=task_id, task_name=task_info.name):
+                logger.info(
+                    f"[Watchdog] 任务已取消: {task_info.name}",
+                    extra={
+                        'task_id': task_id,
+                        'duration': task_info.duration
+                    }
+                )
         elif task.exception():
             task_info.status = TaskStatus.FAILED
             task_info.error = task.exception()
             self._stats['total_failed'] += 1
+            
+            with MetadataContext(task_id=task_id, task_name=task_info.name):
+                logger.error(
+                    f"[Watchdog] 任务失败: {task_info.name}",
+                    extra={
+                        'task_id': task_id,
+                        'duration': task_info.duration,
+                        'error_type': type(task_info.error).__name__,
+                        'error_message': str(task_info.error)
+                    }
+                )
+            
             # 触发错误回调
             for callback in self._on_error_callbacks:
                 try:
                     callback(task_id, task_info)
                 except Exception as e:
-                    print(f"[Watchdog] 错误回调执行失败: {e}")
+                    logger.error(f"[Watchdog] 错误回调执行失败: {e}")
         else:
             task_info.status = TaskStatus.COMPLETED
             self._stats['total_completed'] += 1
+            
+            with MetadataContext(task_id=task_id, task_name=task_info.name):
+                logger.debug(
+                    f"[Watchdog] 任务完成: {task_info.name}",
+                    extra={
+                        'task_id': task_id,
+                        'duration': task_info.duration
+                    }
+                )
+            
             # 触发完成回调
             for callback in self._on_complete_callbacks:
                 try:
                     callback(task_id, task_info)
                 except Exception as e:
-                    print(f"[Watchdog] 完成回调执行失败: {e}")
+                    logger.error(f"[Watchdog] 完成回调执行失败: {e}")
     
     async def _monitor_loop(self):
         """监控循环"""
+        logger.info("[Watchdog] 监控循环已启动")
+        
         while self._running:
             try:
                 await self._check_tasks()
                 await asyncio.sleep(self.check_interval)
             except asyncio.CancelledError:
+                logger.info("[Watchdog] 监控循环被取消")
                 break
             except Exception as e:
-                print(f"[Watchdog] 监控循环异常: {e}")
+                logger.error(f"[Watchdog] 监控循环异常", exc_info=True)
     
     async def _check_tasks(self):
         """检查所有任务"""
@@ -315,18 +365,27 @@ class Watchdog:
     
     async def _handle_timeout(self, task_id: str, task_info: TaskInfo):
         """处理超时任务"""
-        print(f"[Watchdog] 任务超时: {task_info.name} (ID: {task_id}), "
-              f"运行时长: {task_info.duration:.2f}s")
-        
         task_info.status = TaskStatus.TIMEOUT
         self._stats['total_timeout'] += 1
+        
+        # 使用元数据记录超时
+        with MetadataContext(task_id=task_id, task_name=task_info.name):
+            logger.warning(
+                f"[Watchdog] 任务超时: {task_info.name}",
+                extra={
+                    'task_id': task_id,
+                    'duration': task_info.duration,
+                    'timeout': task_info.timeout,
+                    'metadata': task_info.metadata
+                }
+            )
         
         # 触发超时回调，让上层决定是否取消任务
         for callback in self._on_timeout_callbacks:
             try:
                 callback(task_id, task_info)
             except Exception as e:
-                print(f"[Watchdog] 超时回调执行失败: {e}")
+                logger.error(f"[Watchdog] 超时回调执行失败", exc_info=True)
         
         # 注意：不再自动取消超时任务，而是让 TaskManager 通过回调决定
         # 如果上层没有处理，任务将继续运行并在真正完成时更新状态
