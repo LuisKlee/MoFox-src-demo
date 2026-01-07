@@ -4,7 +4,7 @@
 展示如何使用性能监视器和API接口
 """
 
-from app.performance_monitor import (
+from app.monitors.performance_monitor import (
     get_monitor,
     init_monitor,
     performance_api,
