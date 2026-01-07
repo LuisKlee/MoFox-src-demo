@@ -97,6 +97,14 @@ class NetworkError(LLMError):
     pass
 
 
+class APIConnectionError(NetworkError):
+    """API 连接错误
+    
+    当与远端 API 建立或维持连接失败时抛出
+    """
+    pass
+
+
 class ServerError(LLMError):
     """服务器错误异常
     

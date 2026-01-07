@@ -6,16 +6,11 @@ LLM 请求核心逻辑
 
 from typing import List, Dict, Any, Optional, Union, AsyncIterator
 from dataclasses import dataclass, field
-import asyncio
 from contextlib import asynccontextmanager
 
-from .client_registry import get_client, create_client, ClientRegistry
+from .client_registry import create_client, ClientRegistry
 from .model_client.base_client import BaseLLMClient, LLMResponse, StreamChunk
-from .payload.message import MessageBuilder, MessageRole
-from .payload.tool_option import ToolBuilder
-from .payload.resp_format import ResponseParser, CompletionResponse
 from .exceptions import (
-    LLMError,
     ModelNotFoundError,
     InvalidRequestError,
     ValidationError
@@ -293,7 +288,7 @@ class LLMRequestManager:
         try:
             logger.info(f"Generating with tools, model {request.model}")
             response = await client.generate_with_tools(**params)
-            logger.debug(f"Tool calling completed")
+            logger.debug("Tool calling completed")
             
             return response
             
@@ -332,7 +327,7 @@ class LLMRequestManager:
         try:
             logger.info(f"Creating embeddings for {len(texts)} texts")
             embeddings = await client.create_embeddings(texts, model=model, **kwargs)
-            logger.debug(f"Embeddings created")
+            logger.debug("Embeddings created")
             
             return embeddings
             

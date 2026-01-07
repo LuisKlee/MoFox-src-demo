@@ -49,6 +49,19 @@ pip install openai aiohttp boto3
 pip install pillow  # 图像处理
 ```
 
+> Windows 提示：如遇到 `pip` 读取 `requirements.txt` 的编码错误（例如 `gbk` 解码失败），可先在终端执行 `chcp 65001` 切换到 UTF-8，再安装依赖；或先单独安装关键依赖验证：
+
+```bash
+chcp 65001
+py -3.11 -m pip install -r requirements.txt
+
+# 仅安装关键依赖验证运行
+py -3.11 -m pip install "openai>=1.10.0"
+py -3.11 -m pytest -q
+```
+
+> VS Code 解释器：若编辑器报 “无法解析导入 openai”，请在 VS Code 右下角选择与你运行一致的 Python 解释器（推荐 3.11），或在工作区设置中配置 `python.defaultInterpreterPath`。
+
 ### 基础使用
 
 ```python

@@ -5,7 +5,6 @@ Logger 与 Storage 模块集成示例
 """
 import logging
 from pathlib import Path
-from typing import Optional
 
 # 导入 logger 模块
 from kernel.logger import (
@@ -249,7 +248,7 @@ def example_multi_logger():
     
     # 按日志器统计
     stats = logger_system.get_logs(days=1)
-    print(f"\n按日志器统计:")
+    print("\n按日志器统计:")
     for logger_name, count in stats['by_logger'].items():
         print(f"  {logger_name}: {count} 条日志")
 

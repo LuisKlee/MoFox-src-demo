@@ -4,9 +4,8 @@ Google Gemini 客户端实现
 使用 aiohttp 实现的 Gemini API 客户端
 """
 
-from typing import List, Dict, Any, Optional, AsyncIterator
+from typing import List, Dict, Any, Optional, AsyncIterator, TYPE_CHECKING, Union
 import json
-import asyncio
 
 from .base_client import BaseLLMClient, ModelInfo, LLMResponse, StreamChunk, ModelCapability
 from ..exceptions import (
@@ -28,11 +27,15 @@ except ImportError:
 
 # aiohttp 是可选的
 try:
-    import aiohttp
+    import aiohttp  # type: ignore[import-not-found]
     AIOHTTP_AVAILABLE = True
 except ImportError:
+    aiohttp = None  # type: ignore[assignment]
     AIOHTTP_AVAILABLE = False
     logger.warning("aiohttp package not available. Install with: pip install aiohttp")
+
+if TYPE_CHECKING:
+    from aiohttp import ClientSession  # type: ignore[import-not-found]
 
 
 class GeminiClient(BaseLLMClient):
@@ -60,7 +63,7 @@ class GeminiClient(BaseLLMClient):
             max_retries: 最大重试次数
             **kwargs: 其他参数
         """
-        if not AIOHTTP_AVAILABLE:
+        if not AIOHTTP_AVAILABLE or aiohttp is None:
             raise ImportError(
                 "aiohttp package is required for GeminiClient. "
                 "Install with: pip install aiohttp"
@@ -70,10 +73,11 @@ class GeminiClient(BaseLLMClient):
         
         self.api_key = api_key
         self.base_url = base_url or self.DEFAULT_BASE_URL
+        assert aiohttp is not None
         self.timeout = aiohttp.ClientTimeout(total=timeout)
         self.max_retries = max_retries
         
-        self.session: Optional[aiohttp.ClientSession] = None
+        self.session: Optional["ClientSession"] = None
         logger.info(f"Gemini client initialized with base_url={self.base_url}")
     
     async def initialize(self) -> bool:
@@ -82,9 +86,11 @@ class GeminiClient(BaseLLMClient):
         Returns:
             bool: 是否初始化成功
         """
+        assert aiohttp is not None
         try:
             # 创建会话
             self.session = aiohttp.ClientSession(timeout=self.timeout)
+            assert self.session is not None
             
             # 测试连接 - 列出模型
             url = f"{self.base_url}/models?key={self.api_key}"
@@ -183,7 +189,7 @@ class GeminiClient(BaseLLMClient):
                     "parts": [{"text": content}]
                 })
         
-        result = {"contents": contents}
+        result: Dict[str, Any] = {"contents": contents}
         if system_instruction:
             result["system_instruction"] = system_instruction
         
@@ -236,13 +242,17 @@ class GeminiClient(BaseLLMClient):
         """
         if not self.session:
             await self.initialize()
+        if not self.session:
+            raise RuntimeError("Failed to initialize aiohttp session")
+        assert aiohttp is not None
+        assert self.session is not None
         
         try:
             # 转换消息格式
             request_body = self._convert_messages_to_gemini_format(messages)
             
             # 添加生成配置
-            generation_config = {
+            generation_config: Dict[str, Any] = {
                 "temperature": temperature,
                 "topP": top_p
             }
@@ -337,13 +347,17 @@ class GeminiClient(BaseLLMClient):
         """
         if not self.session:
             await self.initialize()
+        if not self.session:
+            raise RuntimeError("Failed to initialize aiohttp session")
+        assert aiohttp is not None
+        assert self.session is not None
         
         try:
             # 转换消息格式
             request_body = self._convert_messages_to_gemini_format(messages)
             
             # 添加生成配置
-            generation_config = {
+            generation_config: Dict[str, Any] = {
                 "temperature": temperature,
                 "topP": top_p
             }
@@ -416,7 +430,7 @@ class GeminiClient(BaseLLMClient):
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         model: str,
-        tool_choice: Optional[str] = "auto",
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = "auto",
         **kwargs
     ) -> LLMResponse:
         """使用工具调用生成
@@ -433,6 +447,10 @@ class GeminiClient(BaseLLMClient):
         """
         if not self.session:
             await self.initialize()
+        if not self.session:
+            raise RuntimeError("Failed to initialize aiohttp session")
+        assert aiohttp is not None
+        assert self.session is not None
         
         try:
             # 转换消息格式
@@ -539,6 +557,10 @@ class GeminiClient(BaseLLMClient):
         """
         if not self.session:
             await self.initialize()
+        if not self.session:
+            raise RuntimeError("Failed to initialize aiohttp session")
+        assert aiohttp is not None
+        assert self.session is not None
         
         try:
             logger.debug(f"Creating embeddings for {len(texts)} texts")
@@ -588,6 +610,10 @@ class GeminiClient(BaseLLMClient):
         """
         if not self.session:
             await self.initialize()
+        if not self.session:
+            raise RuntimeError("Failed to initialize aiohttp session")
+        assert aiohttp is not None
+        assert self.session is not None
         
         try:
             url = f"{self.base_url}/models/{model}?key={self.api_key}"
@@ -614,8 +640,8 @@ class GeminiClient(BaseLLMClient):
                 capabilities.add(ModelCapability.VISION)
             
             return ModelInfo(
-                id=model,
                 provider="gemini",
+                model=model,
                 capabilities=capabilities,
                 context_window=data.get("inputTokenLimit", 32768),
                 max_output_tokens=data.get("outputTokenLimit", 8192),
@@ -638,8 +664,8 @@ class GeminiClient(BaseLLMClient):
             capabilities = {ModelCapability.EMBEDDINGS}
         
         return ModelInfo(
-            id=model,
             provider="gemini",
+            model=model,
             capabilities=capabilities,
             context_window=32768,
             max_output_tokens=8192,

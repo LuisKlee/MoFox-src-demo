@@ -4,8 +4,7 @@ OpenAI 客户端实现
 支持 OpenAI API 和兼容 API（如 Azure OpenAI, DeepSeek 等）
 """
 
-from typing import List, Dict, Any, Optional, AsyncIterator
-import asyncio
+from typing import List, Dict, Any, Optional, AsyncIterator, Union
 
 from .base_client import BaseLLMClient, ModelInfo, LLMResponse, StreamChunk, ModelCapability
 from ..exceptions import (
@@ -33,6 +32,12 @@ try:
     OPENAI_AVAILABLE = True
 except ImportError:
     OPENAI_AVAILABLE = False
+    # 为静态分析与类型检查提供占位符，避免未绑定名称的错误
+    AsyncOpenAI = None  # type: ignore
+    OpenAIError = Exception  # type: ignore
+    OpenAIAuthError = Exception  # type: ignore
+    OpenAIRateLimitError = Exception  # type: ignore
+    OpenAIConnectionError = Exception  # type: ignore
     logger.warning("openai package not available. Install with: pip install openai")
 
 
@@ -88,7 +93,13 @@ class OpenAIClient(BaseLLMClient):
         if organization:
             client_kwargs["organization"] = organization
         
-        self.client = AsyncOpenAI(**client_kwargs)
+        if not OPENAI_AVAILABLE:
+            raise ImportError(
+                "openai package is required for OpenAIClient. Install with: pip install openai"
+            )
+        # 仅在 OpenAI 可用时创建客户端，避免静态分析误报
+        from typing import cast, Any
+        self.client = cast(Any, AsyncOpenAI)(**client_kwargs)
         logger.info(f"OpenAI client initialized with base_url={base_url}")
     
     async def initialize(self) -> bool:
@@ -146,8 +157,6 @@ class OpenAIClient(BaseLLMClient):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
-        frequency_penalty: float = 0.0,
-        presence_penalty: float = 0.0,
         stop: Optional[List[str]] = None,
         **kwargs
     ) -> LLMResponse:
@@ -169,6 +178,10 @@ class OpenAIClient(BaseLLMClient):
         """
         try:
             # 准备参数
+            # 从 kwargs 中提取可选的扩展采样参数，提供默认值
+            frequency_penalty: float = kwargs.pop("frequency_penalty", 0.0)
+            presence_penalty: float = kwargs.pop("presence_penalty", 0.0)
+
             params = {
                 "model": model,
                 "messages": messages,
@@ -220,8 +233,6 @@ class OpenAIClient(BaseLLMClient):
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         top_p: float = 1.0,
-        frequency_penalty: float = 0.0,
-        presence_penalty: float = 0.0,
         stop: Optional[List[str]] = None,
         **kwargs
     ) -> AsyncIterator[StreamChunk]:
@@ -243,6 +254,10 @@ class OpenAIClient(BaseLLMClient):
         """
         try:
             # 准备参数
+            # 从 kwargs 中提取可选的扩展采样参数，提供默认值
+            frequency_penalty: float = kwargs.pop("frequency_penalty", 0.0)
+            presence_penalty: float = kwargs.pop("presence_penalty", 0.0)
+
             params = {
                 "model": model,
                 "messages": messages,
@@ -297,7 +312,7 @@ class OpenAIClient(BaseLLMClient):
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         model: str,
-        tool_choice: Optional[str] = "auto",
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         **kwargs
     ) -> LLMResponse:
         """使用工具调用生成
@@ -314,11 +329,14 @@ class OpenAIClient(BaseLLMClient):
         """
         try:
             # 准备参数
+            # OpenAI 默认为自动选择工具；与基类签名兼容
+            resolved_tool_choice = "auto" if tool_choice is None else tool_choice
+
             params = {
                 "model": model,
                 "messages": messages,
                 "tools": tools,
-                "tool_choice": tool_choice
+                "tool_choice": resolved_tool_choice
             }
             
             # 添加其他参数
@@ -425,8 +443,8 @@ class OpenAIClient(BaseLLMClient):
                 capabilities.add(ModelCapability.VISION)
             
             return ModelInfo(
-                id=model_data.id,
                 provider="openai",
+                model=model_data.id,
                 capabilities=capabilities,
                 context_window=self._get_context_window(model),
                 max_output_tokens=self._get_max_output_tokens(model),
@@ -438,8 +456,8 @@ class OpenAIClient(BaseLLMClient):
             logger.error(f"Failed to get model info: {e}")
             # 返回默认信息
             return ModelInfo(
-                id=model,
                 provider="openai",
+                model=model,
                 capabilities={ModelCapability.CHAT},
                 context_window=4096,
                 max_output_tokens=2048,

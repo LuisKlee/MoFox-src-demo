@@ -143,6 +143,23 @@ config = {
 
 ---
 
+## 安装与依赖
+
+- 使用 ChromaDB 后端需要安装可选依赖：
+
+```bash
+py -3.11 -m pip install chromadb
+```
+
+- Windows 终端编码提示：如遇 `gbk` 解码错误，先执行：
+
+```bash
+chcp 65001
+```
+
+- VS Code 解释器提示：若编辑器显示“无法解析导入 chromadb”，请选择与运行一致的 Python 解释器（建议 3.11），或在工作区设置中配置 `python.defaultInterpreterPath`。
+
+
 ## 数据类速查
 
 ### VectorDocument

@@ -18,6 +18,41 @@
 - **core**：使用 kernel 能力实现记忆、对话、行为等核心功能，不关心插件或具体平台。
 - **app**：把 kernel 与 core 组装成可运行的 Bot 系统，对外暴露高级 API 与插件扩展点（当前文档未详细展开）。
 
+## 环境要求
+- **Python 版本**：推荐使用 **Python 3.10.x**（例如 3.10.13）。
+- 选择 3.10 的原因：与依赖（如 pandas>=2.1、pydantic v2、openai>=1.10 等）兼容性最广，避免部分包在 3.12 上的潜在兼容性问题。
+- 如需 3.11，可自行验证依赖兼容性；暂不建议使用 3.12 及以上。
+
+## 安装与运行
+
+### 快速安装
+
+```bash
+# 使用系统已安装的 Python（示例为 3.11）
+py -3.11 -m pip install -r requirements.txt
+
+# 运行测试（建议）
+py -3.11 -m pytest -q
+```
+
+### Windows 终端编码提示
+- 如在安装依赖时出现 `UnicodeDecodeError: 'gbk' codec can't decode ...`（pip 读取 requirements 文件失败），可先将终端切换到 UTF-8：
+
+```bash
+chcp 65001
+py -3.11 -m pip install -r requirements.txt
+```
+
+- 或先仅安装关键依赖（用于 LLM OpenAI 客户端）以验证：
+
+```bash
+py -3.11 -m pip install "openai>=1.10.0"
+py -3.11 -m pytest -q
+```
+
+### VS Code 解释器选择
+- 如果编辑器提示 `无法解析导入 openai`，请在 VS Code 右下角选择与运行一致的 Python 解释器（建议 3.11），或在工作区设置中配置 `python.defaultInterpreterPath` 指向该解释器。
+
 ## 目录速览
 ```
 src/

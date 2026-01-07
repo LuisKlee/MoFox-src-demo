@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from ..core.session import SessionManager
 from .query import QuerySpec, apply_query_spec
-from kernel.logger import get_logger, MetadataContext
+from kernel.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -183,7 +183,7 @@ class RedisRepository:
 		count = self._client.delete(*keys)
 		
 		logger.info(
-			f"Redis DELETE 操作",
+			"Redis DELETE 操作",
 			extra={
 				'operation': 'delete',
 				'keys': list(keys),
