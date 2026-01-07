@@ -6,7 +6,7 @@
 
 import asyncio
 import logging
-from typing import Dict
+from typing import Dict, Optional
 
 from .models import TaskPriority, ManagedTask
 
@@ -35,7 +35,7 @@ class TaskScheduler:
         except asyncio.QueueFull:
             logger.warning(f"优先级队列已满: {priority}")
     
-    async def get_next_task(self, timeout: float = 0.1) -> str:
+    async def get_next_task(self, timeout: float = 0.1) -> Optional[str]:
         """
         按优先级获取下一个任务
         
