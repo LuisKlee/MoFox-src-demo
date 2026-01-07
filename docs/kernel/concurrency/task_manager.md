@@ -77,6 +77,7 @@ async def main():
     await manager.stop()
 ```
 
+    > 统计说明：`total_completed` 采用动态统计（基于任务终态），避免在重试或多次回调场景下出现重复计数；统计值不会超过提交总数。
 ## 高级功能
 
 ### 1. 任务优先级
@@ -85,6 +86,16 @@ async def main():
 from kernel.concurrency.task_manager import TaskConfig, TaskPriority
 
 async def critical_task():
+    ```
+
+    ## 全局实例与测试隔离
+
+    - 包级全局实例通过 `kernel.concurrency.task_manager.get_task_manager()` 提供；在测试环境中如需重置，可将包内 `_task_manager_instance` 置为 `None` 后重新获取实例：
+
+    ```python
+    import kernel.concurrency.task_manager as tm
+    tm._task_manager_instance = None
+    manager = tm.get_task_manager()
     # 关键任务逻辑
     return "critical result"
 

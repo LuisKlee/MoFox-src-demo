@@ -17,7 +17,7 @@ from .callbacks import CallbackManager
 from ..watchdog import get_watchdog
 
 # 使用 MoFox Logger
-from kernel.logger import get_logger, MetadataContext
+from ...logger import get_logger, MetadataContext
 
 logger = get_logger(__name__)
 
@@ -334,11 +334,14 @@ class TaskManager:
                 break
     
     async def _on_task_success(self, managed_task: ManagedTask, result: Any):
-        """任务成功完成"""
-        managed_task.state = TaskState.COMPLETED
+        """任务成功完成
+        保护性统计：避免重复计数同一任务的完成事件
+        """
+        if managed_task.state != TaskState.COMPLETED:
+            managed_task.state = TaskState.COMPLETED
+            self._stats['total_completed'] += 1
         managed_task.result = result
         managed_task.end_time = time.time()
-        self._stats['total_completed'] += 1
         
         # 使用元数据记录任务完成
         with MetadataContext(task_id=managed_task.task_id, task_name=managed_task.name):
@@ -564,10 +567,15 @@ class TaskManager:
         running_count = len(self.get_tasks_by_state(TaskState.RUNNING))
         queued_count = len(self.get_tasks_by_state(TaskState.QUEUED))
         waiting_count = len(self.get_tasks_by_state(TaskState.WAITING))
+        # 动态统计已完成任务，避免计数偏差（例如重试导致的重复事件）
+        # 避免由于潜在的残留任务造成统计超过提交数
+        completed_raw = sum(1 for t in self._tasks.values() if t.state == TaskState.COMPLETED)
+        # 使用任务计数器作为提交数的权威来源，避免外部状态影响
+        completed_count = min(completed_raw, self._task_counter)
         
         return {
             'total_submitted': self._stats['total_submitted'],
-            'total_completed': self._stats['total_completed'],
+            'total_completed': completed_count,
             'total_failed': self._stats['total_failed'],
             'total_cancelled': self._stats['total_cancelled'],
             'total_retries': self._stats['total_retries'],

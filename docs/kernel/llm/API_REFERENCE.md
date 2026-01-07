@@ -71,8 +71,6 @@ async def generate(
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     top_p: float = 1.0,
-    frequency_penalty: float = 0.0,
-    presence_penalty: float = 0.0,
     stop: Optional[List[str]] = None,
     **kwargs
 ) -> LLMResponse
@@ -85,8 +83,7 @@ async def generate(
 - `temperature` - 温度参数 (0-2)，控制随机性
 - `max_tokens` - 最大生成 token 数
 - `top_p` - 核采样参数 (0-1)
-- `frequency_penalty` - 频率惩罚 (-2 到 2)
-- `presence_penalty` - 存在惩罚 (-2 到 2)
+- 其他提供商特定参数通过 `kwargs` 传入（如 `frequency_penalty`、`presence_penalty` 等）。
 - `stop` - 停止序列列表
 
 **返回**：
@@ -133,7 +130,7 @@ async def generate_with_tools(
     messages: List[Dict[str, Any]],
     tools: List[Dict[str, Any]],
     model: str,
-    tool_choice: Optional[str] = "auto",
+    tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
     **kwargs
 ) -> LLMResponse
 ```
@@ -143,7 +140,7 @@ async def generate_with_tools(
 - `messages` - 消息列表
 - `tools` - 工具定义列表
 - `model` - 模型名称
-- `tool_choice` - 工具选择策略："auto", "none", "required" 或工具名
+- `tool_choice` - 工具选择策略：可为字符串（如 "auto"、"none"、"required" 或工具名）或 OpenAI 风格的字典；当为 `None` 时默认按提供商实现采用 "auto"。
 
 **返回**：
 - `LLMResponse` - 包含工具调用的响应

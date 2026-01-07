@@ -17,7 +17,7 @@ from typing import Any, Callable, Dict, Optional, Set
 from collections import defaultdict
 
 # 使用 MoFox Logger
-from kernel.logger import get_logger, MetadataContext
+from ..logger import get_logger, MetadataContext
 
 logger = get_logger(__name__)
 

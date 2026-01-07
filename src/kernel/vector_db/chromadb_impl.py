@@ -6,13 +6,14 @@ ChromaDB 向量数据库实现
 
 import asyncio
 from typing import List, Dict, Any, Optional, Union
-from pathlib import Pathfrom kernel.logger import get_logger
+from pathlib import Path
 try:
     import chromadb
     from chromadb.config import Settings
     from chromadb.api.models.Collection import Collection
 except ImportError:
     chromadb = None
+    Collection = Any  # 兼容类型注解在未安装 chromadb 时的运行
 
 from .base import (
     VectorDBBase,
