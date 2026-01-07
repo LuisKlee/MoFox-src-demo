@@ -335,8 +335,8 @@ class Watchdog:
             except asyncio.CancelledError:
                 logger.info("[Watchdog] 监控循环被取消")
                 break
-            except Exception as e:
-                logger.error(f"[Watchdog] 监控循环异常", exc_info=True)
+            except Exception:
+                logger.error("[Watchdog] 监控循环异常", exc_info=True)
     
     async def _check_tasks(self):
         """检查所有任务"""
@@ -384,8 +384,8 @@ class Watchdog:
         for callback in self._on_timeout_callbacks:
             try:
                 callback(task_id, task_info)
-            except Exception as e:
-                logger.error(f"[Watchdog] 超时回调执行失败", exc_info=True)
+            except Exception:
+                logger.error("[Watchdog] 超时回调执行失败", exc_info=True)
         
         # 注意：不再自动取消超时任务，而是让 TaskManager 通过回调决定
         # 如果上层没有处理，任务将继续运行并在真正完成时更新状态

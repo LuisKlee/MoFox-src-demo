@@ -6,7 +6,7 @@ LLM Client 注册管理器
 
 from typing import Dict, Type, Optional, Any, List
 from kernel.logger import get_logger
-from .model_client.base_client import BaseLLMClient, ModelInfo
+from .model_client.base_client import BaseLLMClient
 
 
 class ClientRegistry:

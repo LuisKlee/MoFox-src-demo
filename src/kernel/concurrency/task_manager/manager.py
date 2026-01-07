@@ -6,7 +6,6 @@ TaskManager 任务管理器
 
 import asyncio
 import time
-import logging
 from typing import Any, Callable, Coroutine, Dict, Optional
 from collections import defaultdict
 
@@ -106,7 +105,7 @@ class TaskManager:
         self._scheduler_task = asyncio.create_task(self._scheduler_loop())
         
         logger.info(
-            f"TaskManager 已启动",
+            "TaskManager 已启动",
             extra={
                 'max_concurrent_tasks': self.max_concurrent_tasks,
                 'watchdog_enabled': self.enable_watchdog,

@@ -6,7 +6,6 @@ Google Gemini 客户端实现
 
 from typing import List, Dict, Any, Optional, AsyncIterator, TYPE_CHECKING, Union
 import json
-import asyncio
 
 from .base_client import BaseLLMClient, ModelInfo, LLMResponse, StreamChunk, ModelCapability
 from ..exceptions import (

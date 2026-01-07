@@ -40,7 +40,7 @@ except ImportError:
     logger.warning("boto3 package not available. Install with: pip install boto3")
 
 if TYPE_CHECKING:
-    from botocore.client import BaseClient  # type: ignore[import-not-found]
+    pass  # type: ignore[import-not-found]
 
 
 class BedrockClient(BaseLLMClient):

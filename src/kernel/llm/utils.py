@@ -6,7 +6,7 @@ LLM 工具函数
 
 import base64
 import io
-from typing import Union, Tuple, Optional
+from typing import Union, Tuple
 from pathlib import Path
 from PIL import Image
 from kernel.logger import get_logger

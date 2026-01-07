@@ -5,7 +5,7 @@
 """
 
 from typing import List, Dict, Any, Optional, Union, Literal
-from dataclasses import dataclass, field, asdict
+from dataclasses import dataclass, field
 from enum import Enum
 import json
 

@@ -2,9 +2,8 @@
 向量数据库日志集成测试
 """
 import pytest
-import asyncio
 from kernel.vector_db import create_vector_db_async, VectorDocument
-from kernel.logger import setup_logger, get_logger
+from kernel.logger import setup_logger
 
 
 @pytest.fixture
