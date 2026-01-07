@@ -5,7 +5,7 @@
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional, List, Set
+from typing import Any, Dict, Optional, List, Set, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 import os
@@ -81,7 +81,7 @@ class BaseConfig(ABC):
         """
         self._data: Dict[str, Any] = {}
         self._metadata = ConfigMetadata(source=ConfigSource.DEFAULT)
-        self._validators: Dict[str, callable] = {}
+        self._validators: Dict[str, Callable[[Any], bool]] = {}
         self._required_keys: Set[str] = set()
         
         # 加载配置
@@ -208,7 +208,7 @@ class BaseConfig(ABC):
         """
         return list(self._data.keys())
     
-    def add_validator(self, key: str, validator: callable):
+    def add_validator(self, key: str, validator: Callable[[Any], bool]):
         """添加验证器
         
         Args:
@@ -328,8 +328,9 @@ class ConfigLoader:
     def _load_yaml(path: Path) -> Dict[str, Any]:
         """加载 YAML 文件"""
         try:
-            import yaml
-        except ImportError:
+            import importlib
+            yaml = importlib.import_module("yaml")
+        except Exception:
             raise ConfigLoadError(
                 "PyYAML is required for YAML config files. "
                 "Install with: pip install pyyaml"
@@ -433,8 +434,9 @@ class ConfigLoader:
     def _save_yaml(config: Dict[str, Any], path: Path):
         """保存为 YAML 文件"""
         try:
-            import yaml
-        except ImportError:
+            import importlib
+            yaml = importlib.import_module("yaml")
+        except Exception:
             raise ConfigLoadError(
                 "PyYAML is required for YAML config files. "
                 "Install with: pip install pyyaml"
