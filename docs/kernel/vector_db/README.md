@@ -24,6 +24,23 @@ Vector DB 模块提供统一的向量数据库接口，是 MoFox kernel 层的�
 
 ## 快速开始
 
+### 安装与依赖
+
+- `chromadb` 为可选依赖，仅在使用 ChromaDB 后端时需要安装：
+
+```bash
+py -3.11 -m pip install chromadb
+```
+
+- Windows 终端编码提示：如遇 `pip` 读取文件出现 `UnicodeDecodeError: 'gbk'`，可先切换到 UTF-8 再安装：
+
+```bash
+chcp 65001
+py -3.11 -m pip install chromadb
+```
+
+- 编辑器导入提示：若 VS Code 显示“无法解析导入 chromadb”，请选择与运行一致的 Python 解释器（建议 3.11），或在工作区设置中配置 `python.defaultInterpreterPath`。
+
 ### 基础使用
 
 ```python
@@ -426,6 +443,8 @@ db = await create_vector_db_async(
     }
 )
 ```
+
+> 依赖说明：未安装 `chromadb` 时调用 ChromaDB 实现会抛出 `ImportError`。这是预期行为；请先安装依赖或选择其他后端实现。
 
 ### 嵌入函数
 

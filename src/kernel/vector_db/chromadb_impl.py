@@ -5,15 +5,18 @@ ChromaDB 向量数据库实现
 """
 
 import asyncio
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
 from pathlib import Path
-try:
-    import chromadb
-    from chromadb.config import Settings
-    from chromadb.api.models.Collection import Collection
-except ImportError:
-    chromadb = None
-    Collection = Any  # 兼容类型注解在未安装 chromadb 时的运行
+
+# 仅在类型检查时导入具体类型，运行时使用 Any 兼容占位
+if TYPE_CHECKING:
+    import chromadb  # type: ignore
+    from chromadb.config import Settings  # type: ignore
+    from chromadb.api.models.Collection import Collection  # type: ignore
+else:
+    chromadb = None  # type: ignore
+    Settings = Any  # type: ignore
+    Collection = Any  # type: ignore
 
 from .base import (
     VectorDBBase,
@@ -47,8 +50,8 @@ class ChromaDBImpl(VectorDBBase):
             )
         
         super().__init__(config)
-        self._client = None
-        self._collections_cache: Dict[str, Collection] = {}
+        self._client: Any = None
+        self._collections_cache: Dict[str, Any] = {}
         self.logger.info(f"初始化 ChromaDB 实例，配置: {config}")
         
     async def initialize(self) -> None:
@@ -61,29 +64,29 @@ class ChromaDBImpl(VectorDBBase):
                 # HTTP 客户端
                 host = self.config.get('host', 'localhost')
                 port = self.config.get('port', 8000)
-                self._client = chromadb.HttpClient(
+                self._client = chromadb.HttpClient(  # type: ignore[attr-defined]
                     host=host,
                     port=port
                 )
             elif client_type == 'ephemeral':
                 # 临时客户端（仅内存）
-                self._client = chromadb.EphemeralClient()
+                self._client = chromadb.EphemeralClient()  # type: ignore[attr-defined]
             else:
                 # 持久化客户端（默认）
                 persist_dir = self.config.get('persist_directory')
                 if persist_dir:
                     persist_path = Path(persist_dir)
                     persist_path.mkdir(parents=True, exist_ok=True)
-                    settings = Settings(
+                    settings = Settings(  # type: ignore[assignment]
                         persist_directory=str(persist_path),
                         anonymized_telemetry=False
                     )
-                    self._client = chromadb.PersistentClient(
+                    self._client = chromadb.PersistentClient(  # type: ignore[attr-defined]
                         path=str(persist_path),
                         settings=settings
                     )
                 else:
-                    self._client = chromadb.PersistentClient()
+                    self._client = chromadb.PersistentClient()  # type: ignore[attr-defined]
             
             self.logger.info(f"ChromaDB 连接初始化成功，客户端类型: {client_type}")
                     
@@ -192,7 +195,7 @@ class ChromaDBImpl(VectorDBBase):
         collections = await self.list_collections()
         return name in collections
     
-    def _get_or_load_collection(self, name: str) -> Collection:
+    def _get_or_load_collection(self, name: str) -> Any:
         """获取或加载集合（同步方法）"""
         if name not in self._collections_cache:
             embedding_function = self._get_embedding_function()
@@ -228,7 +231,7 @@ class ChromaDBImpl(VectorDBBase):
                 metadatas = [doc.metadata for doc in documents if doc.metadata]
                 
                 # 根据数据构建参数
-                add_kwargs = {'ids': ids}
+                add_kwargs: Dict[str, Any] = {'ids': ids}
                 if embeddings and len(embeddings) == len(documents):
                     add_kwargs['embeddings'] = embeddings
                 if texts and len(texts) == len(documents):
@@ -268,7 +271,7 @@ class ChromaDBImpl(VectorDBBase):
                 metadatas = [doc.metadata for doc in documents if doc.metadata]
                 
                 # 根据数据构建参数
-                update_kwargs = {'ids': ids}
+                update_kwargs: Dict[str, Any] = {'ids': ids}
                 if embeddings and len(embeddings) == len(documents):
                     update_kwargs['embeddings'] = embeddings
                 if texts and len(texts) == len(documents):
