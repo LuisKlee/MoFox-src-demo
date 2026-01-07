@@ -4,7 +4,7 @@ AWS Bedrock 客户端实现
 支持 AWS Bedrock 的各种模型（Claude, Llama, Titan 等）
 """
 
-from typing import List, Dict, Any, Optional, AsyncIterator
+from typing import List, Dict, Any, Optional, AsyncIterator, Union, TYPE_CHECKING
 import json
 import asyncio
 
@@ -27,12 +27,20 @@ except ImportError:
 
 # boto3 是可选的
 try:
-    import boto3
-    from botocore.exceptions import ClientError, BotoCoreError
+    import boto3  # type: ignore[import-not-found]
+    from botocore.exceptions import ClientError, BotoCoreError  # type: ignore[import-not-found]
     BOTO3_AVAILABLE = True
 except ImportError:
+    boto3 = None  # type: ignore[assignment]
+    class ClientError(Exception):
+        pass
+    class BotoCoreError(Exception):
+        pass
     BOTO3_AVAILABLE = False
     logger.warning("boto3 package not available. Install with: pip install boto3")
+
+if TYPE_CHECKING:
+    from botocore.client import BaseClient  # type: ignore[import-not-found]
 
 
 class BedrockClient(BaseLLMClient):
@@ -70,6 +78,7 @@ class BedrockClient(BaseLLMClient):
                 "boto3 package is required for BedrockClient. "
                 "Install with: pip install boto3"
             )
+        assert boto3 is not None
         
         super().__init__()
         
@@ -118,7 +127,8 @@ class BedrockClient(BaseLLMClient):
             return True
             
         except ClientError as e:
-            error_code = e.response.get("Error", {}).get("Code", "")
+            error_response = getattr(e, "response", {}) or {}
+            error_code = error_response.get("Error", {}).get("Code", "")
             if error_code == "UnrecognizedClientException":
                 raise AuthenticationError("Invalid AWS credentials")
             logger.error(f"Initialization failed: {e}")
@@ -141,8 +151,9 @@ class BedrockClient(BaseLLMClient):
         Returns:
             LLMError: 转换后的错误
         """
-        error_code = error.response.get("Error", {}).get("Code", "")
-        error_message = error.response.get("Error", {}).get("Message", "")
+        error_response = getattr(error, "response", {}) or {}
+        error_code = error_response.get("Error", {}).get("Code", "")
+        error_message = error_response.get("Error", {}).get("Message", "")
         
         if error_code == "UnrecognizedClientException":
             return AuthenticationError(f"Authentication failed: {error_message}")
@@ -447,7 +458,7 @@ class BedrockClient(BaseLLMClient):
         messages: List[Dict[str, Any]],
         tools: List[Dict[str, Any]],
         model: str,
-        tool_choice: Optional[str] = "auto",
+        tool_choice: Optional[Union[str, Dict[str, Any]]] = "auto",
         **kwargs
     ) -> LLMResponse:
         """使用工具调用生成
@@ -641,8 +652,8 @@ class BedrockClient(BaseLLMClient):
                 break
         
         return ModelInfo(
-            id=model,
             provider="bedrock",
+            model=model,
             capabilities=capabilities,
             context_window=context_window,
             max_output_tokens=context_window // 2,

@@ -5,7 +5,7 @@ LLM Client 抽象基类
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional, List, AsyncIterator, Union
+from typing import Dict, Any, Optional, List, AsyncIterator, Union, Set
 from dataclasses import dataclass
 from enum import Enum
 
@@ -25,12 +25,18 @@ class ModelCapability(Enum):
 class ModelInfo:
     """模型信息"""
     provider: str  # 提供商：openai, gemini, bedrock等
-    model_name: str  # 模型名称
-    capabilities: List[ModelCapability]  # 支持的能力
+    model: str  # 模型名称/ID
+    capabilities: Set[ModelCapability]  # 支持的能力
     context_window: int  # 上下文窗口大小
-    max_tokens: Optional[int] = None  # 最大输出token数
+    max_output_tokens: Optional[int] = None  # 最大输出token数
     supports_system_message: bool = True  # 是否支持system消息
+    supports_streaming: bool = False  # 是否支持流式输出
     metadata: Optional[Dict[str, Any]] = None  # 其他元数据
+
+    def __post_init__(self) -> None:
+        # 兼容传入 list 的情况，内部统一为 set 便于包含判断
+        if not isinstance(self.capabilities, set):
+            self.capabilities = set(self.capabilities)
 
 
 @dataclass
@@ -43,13 +49,17 @@ class LLMResponse:
     function_call: Optional[Dict[str, Any]] = None  # 函数调用
     tool_calls: Optional[List[Dict[str, Any]]] = None  # 工具调用
     metadata: Optional[Dict[str, Any]] = None  # 其他元数据
+    raw_response: Optional[Any] = None  # 原始响应数据
 
 
 @dataclass
 class StreamChunk:
     """流式响应数据块"""
-    delta: str  # 增量内容
+    delta: Optional[str] = None  # 增量内容（可选）
+    content: Optional[str] = None  # 完整内容片段（部分模型返回）
+    model: Optional[str] = None  # 模型名称
     finish_reason: Optional[str] = None  # 结束原因
+    tool_calls: Optional[List[Dict[str, Any]]] = None  # 工具调用增量
     metadata: Optional[Dict[str, Any]] = None  # 元数据
 
 
@@ -75,7 +85,7 @@ class BaseLLMClient(ABC):
         self._initialized = False
     
     @abstractmethod
-    async def initialize(self) -> None:
+    async def initialize(self) -> bool:
         """初始化客户端连接和资源
         
         Raises:
@@ -89,11 +99,11 @@ class BaseLLMClient(ABC):
         pass
     
     @abstractmethod
-    def get_model_info(self, model_name: str) -> ModelInfo:
+    async def get_model_info(self, model: str) -> ModelInfo:
         """获取模型信息
         
         Args:
-            model_name: 模型名称
+            model: 模型名称
             
         Returns:
             ModelInfo: 模型信息
@@ -135,7 +145,7 @@ class BaseLLMClient(ABC):
         pass
     
     @abstractmethod
-    async def stream_generate(
+    def stream_generate(
         self,
         messages: List[Dict[str, Any]],
         model: str,
@@ -168,8 +178,8 @@ class BaseLLMClient(ABC):
     async def generate_with_tools(
         self,
         messages: List[Dict[str, Any]],
-        model: str,
         tools: List[Dict[str, Any]],
+        model: str,
         tool_choice: Optional[Union[str, Dict[str, Any]]] = None,
         **kwargs
     ) -> LLMResponse:
@@ -177,8 +187,8 @@ class BaseLLMClient(ABC):
         
         Args:
             messages: 消息列表
-            model: 模型名称
             tools: 工具定义列表
+            model: 模型名称
             tool_choice: 工具选择策略
             **kwargs: 其他参数
             
@@ -194,7 +204,7 @@ class BaseLLMClient(ABC):
     
     async def create_embeddings(
         self,
-        texts: Union[str, List[str]],
+        texts: List[str],
         model: str,
         **kwargs
     ) -> List[List[float]]:
@@ -215,7 +225,7 @@ class BaseLLMClient(ABC):
             f"{self.__class__.__name__} does not support embeddings"
         )
     
-    def supports_capability(
+    async def supports_capability(
         self,
         model: str,
         capability: ModelCapability
@@ -230,8 +240,8 @@ class BaseLLMClient(ABC):
             bool: 是否支持
         """
         try:
-            model_info = self.get_model_info(model)
-            return capability in model_info.capabilities
+            model_info = await self.get_model_info(model)
+            return capability in set(model_info.capabilities)
         except ValueError:
             return False
     

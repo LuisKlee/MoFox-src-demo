@@ -425,8 +425,8 @@ class OpenAIClient(BaseLLMClient):
                 capabilities.add(ModelCapability.VISION)
             
             return ModelInfo(
-                id=model_data.id,
                 provider="openai",
+                model=model_data.id,
                 capabilities=capabilities,
                 context_window=self._get_context_window(model),
                 max_output_tokens=self._get_max_output_tokens(model),
@@ -438,8 +438,8 @@ class OpenAIClient(BaseLLMClient):
             logger.error(f"Failed to get model info: {e}")
             # 返回默认信息
             return ModelInfo(
-                id=model,
                 provider="openai",
+                model=model,
                 capabilities={ModelCapability.CHAT},
                 context_window=4096,
                 max_output_tokens=2048,
