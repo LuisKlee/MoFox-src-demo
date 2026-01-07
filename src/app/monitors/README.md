@@ -13,19 +13,22 @@
 - **健康评估**: 自动评估系统健康状况并给出建议
 - **统一API**: 提供完整的RESTful API接口
 - **摘要报告**: 生成包含所有监视器数据的综合报告
+- **📝 日志集成**: 与日志系统深度集成，自动记录监视器事件和指标
 
 ## 架构
 
 ```
 monitors/
-├── __init__.py          # 模块导出
-├── manager.py           # 监视器管理器
-├── unified_api.py       # 统一API接口
-└── README.md           # 文档
+├── __init__.py              # 模块导出
+├── manager.py               # 监视器管理器
+├── unified_api.py           # 统一API接口
+├── logger_integration.py    # 日志系统集成（NEW）
+├── logger_integration_examples.py  # 集成示例（NEW）
+└── README.md               # 文档
 
 整合的监视器：
-├── performance_monitor/  # 性能监视器
-└── database_monitor/     # 数据库监视器
+├── performance_monitor/     # 性能监视器
+└── database_monitor/        # 数据库监视器
 ```
 
 ## 快速开始
@@ -55,7 +58,31 @@ print(f"健康等级: {health['health_level']}")
 manager.disable_all()
 ```
 
-### 2. 使用统一API
+### 2. 与日志系统集成（推荐）✨
+
+```python
+from app.monitors import setup_monitor_logger_integration
+
+# 一行代码实现监视器与日志系统的完整集成
+integration = setup_monitor_logger_integration(app_name="myapp")
+
+# 启动监视器
+integration.start()
+
+# 自动记录日志
+integration.check_and_log_health()           # 健康状态
+integration.log_performance_metrics()        # 性能指标
+integration.log_database_metrics()           # 数据库指标
+integration.log_slow_queries()               # 慢查询告警
+integration.log_comprehensive_report()       # 综合报告
+
+# 停止监视器
+integration.stop()
+```
+
+详细信息请查看：📖 [日志集成指南](../../docs/app/monitors/LOGGER_INTEGRATION.md)
+
+### 3. 使用统一API
 
 ```python
 from app.monitors import unified_monitor_api
@@ -82,7 +109,7 @@ response = unified_monitor_api.get_summary_report()
 print(response['data'])
 ```
 
-### 3. 分别访问各监视器
+### 4. 分别访问各监视器
 
 ```python
 from app.monitors import get_manager

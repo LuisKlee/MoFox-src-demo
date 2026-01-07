@@ -9,9 +9,17 @@
 
 from .manager import MonitorManager, get_manager
 from .unified_api import unified_monitor_api
+from .logger_integration import (
+    MonitorLoggerIntegration,
+    setup_monitor_logger_integration,
+    get_monitor_logger_integration,
+)
 
 __all__ = [
     'MonitorManager',
     'get_manager',
     'unified_monitor_api',
+    'MonitorLoggerIntegration',
+    'setup_monitor_logger_integration',
+    'get_monitor_logger_integration',
 ]
