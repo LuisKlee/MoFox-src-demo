@@ -123,6 +123,11 @@ class TaskManagerMetrics:
         return sum(s.total_cancelled for s in self.task_stats.values())
     
     @property
+    def total_tasks_timeout(self) -> int:
+        """总超时任务数"""
+        return sum(s.total_timeout for s in self.task_stats.values())
+    
+    @property
     def success_rate(self) -> float:
         """成功率"""
         if self.total_tasks_created == 0:

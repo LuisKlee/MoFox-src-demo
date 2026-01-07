@@ -142,7 +142,7 @@ def example_5_integration_pattern():
        task_manager = get_task_manager()
     
     2. 附加监视器（在应用初始化时）:
-       from app.performance_monitor.task_monitor import attach_monitor
+       from app.monitors.performance_monitor.task_monitor import attach_monitor
        monitor = attach_monitor(task_manager)
     
     3. 在Task执行的相关地方手动调用监视记录（可以通过回调或包装器）:
