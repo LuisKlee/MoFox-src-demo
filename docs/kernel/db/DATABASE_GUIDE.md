@@ -1,752 +1,559 @@
-# 数据库选择与配置指南（Database Selection & Configuration Guide）
+# SQLite 数据库配置与优化指南
 
 ## 目录
 
-1. [数据库对比](#数据库对比)
-2. [环境配置](#环境配置)
-3. [性能对比](#性能对比)
-4. [故障排除](#故障排除)
-5. [迁移指南](#迁移指南)
+1. [SQLite 简介](#sqlite-简介)
+2. [快速开始](#快速开始)
+3. [高级配置](#高级配置)
+4. [性能优化](#性能优化)
+5. [故障排除](#故障排除)
+6. [迁移与备份](#迁移与备份)
 
 ---
 
-## 数据库对比
+## SQLite 简介
 
-### 概览表（Overview Table）
+SQLite 是一个轻量级、自包含的 SQL 数据库引擎，完全 ACID 兼容，适合单机应用、本地开发和嵌入式系统。
 
-| 特性 | SQLite | MySQL | PostgreSQL | Redis | MongoDB |
-|------|--------|-------|------------|-------|---------|
-| **类型** | 关系型 | 关系型 | 关系型 | 键值/缓存 | 文档型 |
-| **部署** | 文件 | 服务器 | 服务器 | 内存 | 服务器 |
-| **并发** | 低 | 中 | 高 | 高 | 中 |
-| **持久化** | 是 | 是 | 是 | 可选 | 是 |
-| **事务** | 基础 | 完整 | 完整 | 部分 | 文档级 |
-| **Schema** | 固定 | 固定 | 固定 | 无 | 灵活 |
-| **查询** | SQL | SQL | SQL | 命令 | MQL |
-| **扩展** | 差 | 中 | 好 | 差 | 好 |
-| **学习曲线** | 低 | 低 | 中 | 低 | 中 |
-| **成本** | 免费 | 免费 | 免费 | 免费 | 免费 |
+### 特性
 
-### 详细对比
+| 特性 | 说明 |
+|------|------|
+| **零配置** | 无需安装或配置，文件即数据库 |
+| **ACID** | 完整的事务支持和数据一致性 |
+| **SQL 标准** | 支持大部分 SQL 语句 |
+| **小巧** | 核心库仅几百 KB |
+| **可靠** | 生产就绪，广泛应用 |
+| **WAL 支持** | Write-Ahead Logging 提高并发 |
 
-#### SQLite
+### 适用场景
 
-**优点：**
-- ✅ 零配置，文件即数据库
-- ✅ 完整 SQL 支持
-- ✅ 小型应用足够
-- ✅ 嵌入式应用首选
-- ✅ 备份简单（复制文件）
-
-**缺点：**
-- ❌ 写入并发差（全库锁）
-- ❌ 不适合多进程/网络访问
-- ❌ 扩展性有限
-
-**适用场景：**
 ```
-✓ 本地开发
-✓ 桌面应用
-✓ 演示/原型
-✓ 读多写少应用
-✓ 移动应用
-✗ 生产 Web 服务
-✗ 高并发场景
+✅ 本地开发和测试
+✅ 桌面应用和移动应用  
+✅ 原型和演示
+✅ 单机应用
+✅ 缓存和临时存储
 ```
 
-**配置示例：**
-```python
-from kernel.db.core import EngineManager, EngineConfig
+### 不适用场景
 
-# 文件数据库
-engine = EngineManager().create(EngineConfig(
-    dialect="sqlite",
-    database="data/app.db"
-))
-
-# 内存数据库（测试用）
-engine = EngineManager().create(EngineConfig(
-    dialect="sqlite",
-    database=":memory:"
-))
+```
+❌ 多用户网络应用（考虑 MySQL/PostgreSQL）
+❌ 海量数据（TB+ 级别）
+❌ 高并发写入（>100 QPS）
+❌ 分布式系统（需要 MongoDB）
 ```
 
 ---
 
-#### MySQL
+## 快速开始
 
-**优点：**
-- ✅ 生产环境成熟
-- ✅ 并发性能好
-- ✅ 生态丰富
-- ✅ 易于部署和维护
-- ✅ 成本低
+### 1. 文件数据库
 
-**缺点：**
-- ❌ 功能比 PostgreSQL 少
-- ❌ 某些场景性能不如 PostgreSQL
-- ❌ 复杂查询优化困难
-
-**适用场景：**
-```
-✓ Web 应用（WordPress、Laravel）
-✓ 互联网公司
-✓ 中等规模应用
-✓ 实时系统
-✓ SaaS 应用
-✗ 复杂分析查询
-✗ 大数据处理
-```
-
-**配置示例：**
 ```python
-from kernel.db.core import create_mysql_engine
+from kernel.db.core import create_sqlite_engine, SessionManager
+from kernel.db.api import SQLAlchemyCRUDRepository
 
-# 基础配置
-engine = create_mysql_engine(
-    database="mofox",
-    username="root",
-    password="password123",
-    host="localhost",
-    port=3306
-)
+# 创建或连接数据库文件
+engine = create_sqlite_engine("data/myapp.db")
 
-# 高级配置（生产推荐）
-from kernel.db.core import EngineManager, EngineConfig
+# 创建表
+from sqlalchemy import Column, Integer, String, create_all
 
-engine = EngineManager().create(EngineConfig(
-    dialect="mysql",
-    database="mofox",
-    username="${DB_USER}",
-    password="${DB_PASSWORD}",
-    host="${DB_HOST}",
-    port=3306,
-    pool_size=20,          # 连接池大小
-    max_overflow=10,       # 溢出连接数
-    pool_recycle=3600,     # 连接回收时间（秒）
-    echo=False,            # 关闭 SQL 日志
-    charset="utf8mb4",     # 字符集（支持emoji）
-    connect_args={
-        "autocommit": False,
-        "check_same_thread": False
-    }
-))
+class User(Base):
+    __tablename__ = "users"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100))
+    email = Column(String(100))
+
+Base.metadata.create_all(engine)
+
+# 使用 CRUD 仓库
+session_mgr = SessionManager(engine)
+repo = SQLAlchemyCRUDRepository(session_mgr)
+
+with repo.session_scope() as session:
+    user = repo.add(session, User(name="Alice", email="alice@example.com"), flush=True)
+    users = repo.list(session, User)
 ```
 
-**调优参数：**
+### 2. 内存数据库
+
+```python
+# 创建临时内存数据库（测试用）
+engine = create_sqlite_engine(":memory:")
+
+session_mgr = SessionManager(engine)
+repo = SQLAlchemyCRUDRepository(session_mgr)
+
+with repo.session_scope() as session:
+    # 使用完全相同的 API
+    obj = repo.add(session, MyModel())
 ```
-pool_size: 并发用户数/2-4
-max_overflow: pool_size/2
-pool_recycle: 3600-7200
-connection_timeout: 10-30（秒）
+
+### 3. 临时文件数据库
+
+```python
+import tempfile
+
+# 创建临时数据库文件
+with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+    db_path = f.name
+
+engine = create_sqlite_engine(db_path)
+# ...应用逻辑...
 ```
 
 ---
 
-#### PostgreSQL
+## 高级配置
 
-**优点：**
-- ✅ 功能最完整
-- ✅ 性能优越
-- ✅ 复杂查询支持好
-- ✅ 扩展性强（插件、自定义类型）
-- ✅ 数据完整性保证好
+### 标准配置
 
-**缺点：**
-- ❌ 学习曲线陡
-- ❌ 配置复杂
-- ❌ 资源消耗较多
-
-**适用场景：**
-```
-✓ 大型互联网应用
-✓ 数据分析
-✓ 金融系统
-✓ 地理信息系统（GIS）
-✓ 时间序列数据
-✓ 高可用集群
-✗ 简单小应用（过度设计）
-```
-
-**配置示例：**
 ```python
-from kernel.db.core import create_postgres_engine
+from kernel.db.core import EngineConfig, EngineManager
 
-# 生产推荐配置
-engine = create_postgres_engine(
-    database="mofox",
-    username="${DB_USER}",
-    password="${DB_PASSWORD}",
-    host="${DB_HOST}",
-    port=5432,
-    pool_size=20,
-    max_overflow=10,
-    pool_recycle=3600
+config = EngineConfig(
+    database="data/app.db",           # 数据库文件路径
+    echo=False,                       # 不输出 SQL 语句
+    pool_size=10,                     # 连接池大小
+    pool_timeout=30,                  # 连接超时时间
+    create_if_missing=True,           # 自动创建数据库文件
 )
 
-# 连接字符串方式
-from sqlalchemy import create_engine
+manager = EngineManager()
+engine = manager.create(config)
+```
 
-engine = create_engine(
-    "postgresql+psycopg2://user:password@localhost/dbname",
-    pool_size=20,
-    max_overflow=10,
-    pool_recycle=3600
+### 开发环境配置
+
+```python
+config = EngineConfig(
+    database="data/dev.db",
+    echo=True,                        # 输出 SQL 调试
+    pool_size=5,
+    enable_wal=True,
+    enable_foreign_keys=True,
+)
+
+engine = manager.create(config)
+```
+
+### 生产环境配置
+
+```python
+config = EngineConfig(
+    database="data/prod.db",
+    echo=False,
+    pool_size=20,                     # 更多连接
+    pool_timeout=60,
+    enable_wal=True,                  # 启用 WAL 模式
+    enable_foreign_keys=True,         # 强制外键约束
+    journal_mode="WAL",
+    synchronous="NORMAL",             # 平衡安全和性能
+    timeout=30,                       # 锁定超时
+    create_if_missing=True,
+)
+
+engine = manager.create(config)
+```
+
+### Pragma 配置详解
+
+| Pragma | 值 | 说明 |
+|--------|-----|------|
+| `enable_wal` | True | 启用 WAL 日志模式，提高并发性能 |
+| `enable_foreign_keys` | True | 启用外键约束检查 |
+| `journal_mode` | WAL | 日志模式：WAL（推荐）或 DELETE |
+| `synchronous` | NORMAL | 同步级别：OFF（快速）、NORMAL（推荐）、FULL（安全） |
+| `timeout` | 30 | 数据库锁定超时（秒），避免长期等待 |
+
+---
+
+## 性能优化
+
+### 1. WAL 模式（推荐）
+
+WAL（Write-Ahead Logging）使用方式：
+
+```python
+engine = create_sqlite_engine(
+    "data/app.db",
+    enable_wal=True,                  # 自动应用所有 WAL 相关配置
 )
 ```
 
-**性能调优：**
+**优势：**
+- 读写操作可并发进行
+- 写入性能提升 2-5 倍
+- 更好的并发应用体验
+
+**权衡：**
+- 增加文件数量（`.db-wal`、`.db-shm`）
+- 不支持网络文件系统（NFS）
+
+### 2. 连接池优化
+
+```python
+config = EngineConfig(
+    database="data/app.db",
+    pool_size=20,                     # 基础连接数
+    pool_timeout=60,                  # 等待连接超时
+    pool_recycle=3600,                # 连接回收时间（秒）
+)
+```
+
+**选择合适的 pool_size：**
+- 开发环境：5-10
+- 生产环境：10-30
+- 高并发：20-50
+
+### 3. Pragma 优化
+
+```python
+from kernel.db.core import create_sqlite_engine
+
+engine = create_sqlite_engine(
+    "data/app.db",
+    enable_wal=True,
+    enable_foreign_keys=True,
+    journal_mode="WAL",
+    synchronous="NORMAL",             # 平衡性能和安全
+    timeout=30,
+)
+```
+
+**关键 Pragma 解释：**
+
 ```sql
--- 增加连接数
-ALTER SYSTEM SET max_connections = 200;
+-- WAL 日志模式（推荐）
+PRAGMA journal_mode = WAL;
 
--- 共享缓冲区
-ALTER SYSTEM SET shared_buffers = '4GB';
+-- 同步级别（NORMAL 是最佳平衡）
+PRAGMA synchronous = NORMAL;
 
--- 工作内存
-ALTER SYSTEM SET work_mem = '100MB';
+-- 缓存大小（-64000 表示 64MB）
+PRAGMA cache_size = -64000;
 
--- 重启服务
-sudo systemctl restart postgresql
+-- 临时存储在内存（加快临时表）
+PRAGMA temp_store = MEMORY;
+
+-- 自动真空（增量模式）
+PRAGMA auto_vacuum = INCREMENTAL;
+
+-- 内存映射 I/O（加快读取）
+PRAGMA mmap_size = 30000000;
+
+-- 外键约束
+PRAGMA foreign_keys = ON;
 ```
 
----
+### 4. 索引优化
 
-#### Redis
-
-**优点：**
-- ✅ 极速读写（纳秒级）
-- ✅ 多种数据结构（String、List、Set、Hash、ZSet）
-- ✅ 发布/订阅
-- ✅ 分布式锁
-- ✅ 支持 Lua 脚本
-
-**缺点：**
-- ❌ 内存存储（成本高）
-- ❌ 数据可能丢失
-- ❌ 不能替代数据库
-- ❌ 需要主从配置高可用
-
-**适用场景：**
-```
-✓ 缓存层
-✓ 会话存储
-✓ 实时排行榜
-✓ 消息队列
-✓ 计数器
-✓ 发布/订阅
-✗ 主要存储（数据安全）
-✗ 复杂查询
-```
-
-**配置示例：**
 ```python
-from kernel.db.core import create_redis_engine
+from sqlalchemy import Index, Column, Integer, String
 
-# 单机模式
-redis_client = create_redis_engine(
-    host="localhost",
-    port=6379,
-    database="0",
-    password="your_password",
-    decode_responses=True  # 自动解码为字符串
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True)
+    email = Column(String(100), unique=True, index=True)  # 唯一索引
+    name = Column(String(100), index=True)                # 普通索引
+    status = Column(String(20), index=True)
+    created_at = Column(DateTime, index=True)
+
+# 复合索引
+__table_args__ = (
+    Index('idx_user_status_created', 'status', 'created_at'),
 )
-
-# 带连接池
-from redis import ConnectionPool
-
-pool = ConnectionPool(
-    host="localhost",
-    port=6379,
-    db=0,
-    max_connections=50,
-    socket_keepalive=True,
-    socket_keepalive_options={1: (1, 3)}  # TCP Keep-Alive
-)
-redis_client = create_redis_engine(connection_pool=pool)
 ```
 
-**高可用配置（Sentinel）：**
+### 5. 批量操作优化
+
 ```python
-from redis.sentinel import Sentinel
-
-sentinels = [("sentinel1", 26379), ("sentinel2", 26379)]
-sentinel = Sentinel(sentinels)
-redis_client = sentinel.master_for("mymaster", socket_timeout=0.1)
+with repo.session_scope() as session:
+    # ❌ 低效：逐条插入，频繁提交
+    for i in range(1000):
+        repo.add(session, User(name=f"user{i}"))
+    
+    # ✅ 高效：批量插入，一次提交
+    users = [User(name=f"user{i}") for i in range(1000)]
+    repo.add_many(session, users, flush=True)
 ```
 
-**集群配置：**
+### 6. 查询优化
+
 ```python
-from rediscluster import RedisCluster
+from kernel.db.api import QuerySpec
 
-nodes = [
-    {"host": "node1", "port": 6379},
-    {"host": "node2", "port": 6379},
-    {"host": "node3", "port": 6379},
-]
-rc = RedisCluster(startup_nodes=nodes, decode_responses=True)
-```
+# ❌ 低效：加载所有数据再筛选
+with repo.session_scope() as session:
+    all_users = repo.list(session, User)
+    active = [u for u in all_users if u.status == "active"]
 
----
-
-#### MongoDB
-
-**优点：**
-- ✅ 灵活 Schema（无需预定义）
-- ✅ 文档存储（JSON 结构）
-- ✅ 强大的查询语言（MQL）
-- ✅ 聚合管道（分析能力强）
-- ✅ 分片支持（水平扩展）
-- ✅ 事务支持（4.0+）
-
-**缺点：**
-- ❌ 内存占用大
-- ❌ 事务支持有限
-- ❌ JOIN 复杂（需要反范式化）
-- ❌ 写入放大
-
-**适用场景：**
-```
-✓ 快速原型开发
-✓ 日志存储
-✓ 用户生成内容
-✓ 内容管理系统
-✓ 移动应用后端
-✓ 物联网数据存储
-✗ 高度关系化数据
-✗ 复杂事务
-```
-
-**配置示例：**
-```python
-from kernel.db.core import create_mongodb_engine
-
-# 本地单机
-mongo_client = create_mongodb_engine(
-    uri="mongodb://localhost:27017",
-    database="mofox"
-)
-
-# 生产推荐（认证）
-mongo_client = create_mongodb_engine(
-    uri="mongodb://user:password@mongo1:27017,mongo2:27017,mongo3:27017",
-    database="mofox",
-    replicaSet="rs0",
-    authSource="admin"
-)
-
-# MongoDB Atlas（云端）
-mongo_client = create_mongodb_engine(
-    uri="mongodb+srv://username:password@cluster.mongodb.net/dbname",
-    database="mofox"
-)
-```
-
-**集群配置（Replica Set）：**
-```bash
-# 启动 3 个 MongoDB 实例
-mongod --replSet rs0 --port 27017
-mongod --replSet rs0 --port 27018
-mongod --replSet rs0 --port 27019
-
-# 初始化副本集
-mongo
-> rs.initiate({
-    _id: "rs0",
-    members: [
-      {_id: 0, host: "mongo1:27017"},
-      {_id: 1, host: "mongo2:27017"},
-      {_id: 2, host: "mongo3:27017"}
-    ]
-  })
-```
-
----
-
-## 环境配置
-
-### Docker Compose 快速启动
-
-```yaml
-version: '3.8'
-
-services:
-  mysql:
-    image: mysql:8.0
-    environment:
-      MYSQL_ROOT_PASSWORD: root_pass
-      MYSQL_DATABASE: mofox
-    ports:
-      - "3306:3306"
-    volumes:
-      - mysql_data:/var/lib/mysql
-
-  postgres:
-    image: postgres:15
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres_pass
-      POSTGRES_DB: mofox
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-
-  redis:
-    image: redis:7
-    ports:
-      - "6379:6379"
-    command: redis-server --appendonly yes
-    volumes:
-      - redis_data:/data
-
-  mongodb:
-    image: mongo:6
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: admin_pass
-      MONGO_INITDB_DATABASE: mofox
-    ports:
-      - "27017:27017"
-    volumes:
-      - mongo_data:/data/db
-
-volumes:
-  mysql_data:
-  postgres_data:
-  redis_data:
-  mongo_data:
-```
-
-**启动：**
-```bash
-docker-compose up -d
-```
-
-### 环境变量配置
-
-创建 `.env` 文件：
-```
-# MySQL
-MYSQL_HOST=localhost
-MYSQL_PORT=3306
-MYSQL_USER=root
-MYSQL_PASSWORD=root_pass
-MYSQL_DATABASE=mofox
-
-# PostgreSQL
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres_pass
-POSTGRES_DATABASE=mofox
-
-# Redis
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_DATABASE=0
-REDIS_PASSWORD=
-
-# MongoDB
-MONGO_URI=mongodb://localhost:27017
-MONGO_DATABASE=mofox
-MONGO_USERNAME=admin
-MONGO_PASSWORD=admin_pass
-```
-
-**使用：**
-```python
-import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
-from kernel.db.core import create_mysql_engine
-
-engine = create_mysql_engine(
-    database=os.getenv("MYSQL_DATABASE"),
-    username=os.getenv("MYSQL_USER"),
-    password=os.getenv("MYSQL_PASSWORD"),
-    host=os.getenv("MYSQL_HOST"),
-    port=int(os.getenv("MYSQL_PORT", 3306))
-)
-```
-
----
-
-## 性能对比
-
-### 基准测试（Benchmark）
-
-测试场景：插入 100,000 条记录
-
-```
-SQLite:
-  - 单条插入：0.12ms
-  - 批量插入：0.002ms/条
-  - 总耗时：200ms
-
-MySQL:
-  - 单条插入：0.45ms
-  - 批量插入（1000）：0.015ms/条
-  - 总耗时：1.5s
-
-PostgreSQL:
-  - 单条插入：0.35ms
-  - 批量插入（1000）：0.010ms/条
-  - 总耗时：1.0s
-
-Redis（String）：
-  - 单条设置：0.08ms
-  - 批量设置（Pipeline）：0.001ms/条
-  - 总耗时：100ms
-
-MongoDB：
-  - 单条插入：0.25ms
-  - 批量插入：0.008ms/条
-  - 总耗时：800ms
-```
-
-**查询性能（100万条记录）：**
-
-```
-SQLite 查询：
-  - 简单条件：150ms
-  - 带索引：5ms
-
-MySQL 查询：
-  - 简单条件：120ms
-  - 带索引：2ms
-
-PostgreSQL 查询：
-  - 简单条件：80ms
-  - 带索引：1ms
-
-Redis 读取（热数据）：
-  - String 读取：0.1ms
-  - Hash 读取：0.15ms
-
-MongoDB 查询：
-  - 简单条件：200ms
-  - 带索引：10ms
-  - 聚合管道：500ms
+# ✅ 高效：在数据库层筛选
+with repo.session_scope() as session:
+    spec = QuerySpec(
+        filters=[User.status == "active"],
+        limit=100
+    )
+    active = repo.list(session, User, spec)
 ```
 
 ---
 
 ## 故障排除
 
-### MySQL 常见问题
+### 问题 1：数据库被锁定
 
-**问题 1：连接被拒绝**
-```python
-# 错误：pymysql.err.OperationalError: (2003, "Can't connect to MySQL server")
-
-# 解决：
-1. 检查 MySQL 是否运行：mysql -u root -p
-2. 检查主机/端口：host="127.0.0.1", port=3306
-3. 检查防火墙：sudo ufw allow 3306
-4. 检查用户名/密码
+```
+sqlite3.OperationalError: database is locked
 ```
 
-**问题 2：字符集错误**
-```python
-# 错误：UnicodeDecodeError: 'utf-8' codec can't decode byte
+**原因：** 另一个进程正在写入数据库
 
-# 解决：
-engine = create_mysql_engine(
-    ...,
-    charset="utf8mb4",
-    connect_args={"charset": "utf8mb4"}
+**解决方案：**
+```python
+# 增加超时时间
+engine = create_sqlite_engine(
+    "data/app.db",
+    timeout=60  # 等待 60 秒获取锁
+)
+
+# 或使用 WAL 模式减少锁时间
+engine = create_sqlite_engine(
+    "data/app.db",
+    enable_wal=True
 )
 ```
 
-**问题 3：连接超时**
-```python
-# 错误：pymysql.err.OperationalError: Lost connection to MySQL server
+### 问题 2：外键约束失败
 
-# 解决：
-engine = EngineManager().create(EngineConfig(
-    ...,
-    pool_recycle=3600,  # 回收连接
-    pool_pre_ping=True  # 连接前 ping
-))
+```
+sqlite3.IntegrityError: FOREIGN KEY constraint failed
 ```
 
-### PostgreSQL 常见问题
+**原因：** 数据库没有启用外键检查
 
-**问题 1：认证失败**
+**解决方案：**
 ```python
-# 错误：psycopg2.OperationalError: FATAL: Ident authentication failed
-
-# 解决：修改 /etc/postgresql/15/main/pg_hba.conf
-# 改为：local   all             all                     trust
-# 或：  host    all             all     127.0.0.1/32    md5
-
-sudo systemctl restart postgresql
-```
-
-**问题 2：TCP 连接被拒**
-```python
-# 解决：确保 PostgreSQL 监听 TCP
-# /etc/postgresql/15/main/postgresql.conf
-listen_addresses = 'localhost'  # 改为 '*' 则监听所有
-
-sudo systemctl restart postgresql
-```
-
-### Redis 常见问题
-
-**问题 1：连接被拒绝**
-```python
-# 错误：ConnectionRefusedError: [Errno 111] Connection refused
-
-# 解决：
-redis-cli ping  # 检查 Redis 是否运行
-redis-server    # 启动 Redis
-```
-
-**问题 2：密码认证失败**
-```python
-# 解决：
-redis_client = create_redis_engine(
-    host="localhost",
-    port=6379,
-    password="your_password"
-)
-
-# 或查看 Redis 配置
-# redis.conf: requirepass your_password
-```
-
-### MongoDB 常见问题
-
-**问题 1：连接超时**
-```python
-# 解决：
-mongo_client = create_mongodb_engine(
-    uri="mongodb://localhost:27017",
-    serverSelectionTimeoutMS=5000,
-    connectTimeoutMS=10000
+engine = create_sqlite_engine(
+    "data/app.db",
+    enable_foreign_keys=True  # 启用外键约束
 )
 ```
 
-**问题 2：认证失败**
+### 问题 3：大文件性能下降
+
+**原因：** 数据库文件过大，需要优化
+
+**解决方案：**
 ```python
-# 解决：
-mongo_client = create_mongodb_engine(
-    uri="mongodb://user:password@localhost:27017",
-    authSource="admin"  # 关键：指定认证数据库
+# 启用自动真空防止碎片
+engine = create_sqlite_engine(
+    "data/app.db",
+    enable_wal=True,
+    # SQLite 会自动配置以下 pragma
+    # PRAGMA auto_vacuum = INCREMENTAL;
+    # PRAGMA vacuum_into = 'data/app-optimized.db';
+)
+
+# 手动优化（可选）
+with engine.connect() as conn:
+    conn.execute("VACUUM")  # 重组数据库文件
+    conn.commit()
+```
+
+### 问题 4：内存使用过高
+
+**原因：** 缓存大小过大或连接数过多
+
+**解决方案：**
+```python
+config = EngineConfig(
+    database="data/app.db",
+    pool_size=10,           # 减少连接数
+    echo=False,             # 关闭 SQL 日志
 )
 ```
 
 ---
 
-## 迁移指南
+## 迁移与备份
 
-### SQLite → MySQL
-
-```python
-from kernel.db.core import EngineManager, EngineConfig, SessionManager
-from kernel.db.api import SQLAlchemyCRUDRepository, QuerySpec
-
-# 1. 创建源引擎（SQLite）
-source_engine = EngineManager().create(EngineConfig(
-    dialect="sqlite",
-    database="data/app.db"
-))
-
-# 2. 创建目标引擎（MySQL）
-target_engine = EngineManager().create(EngineConfig(
-    dialect="mysql",
-    database="mofox_new",
-    username="root",
-    password="password",
-    host="localhost",
-    port=3306
-))
-
-# 3. 迁移数据
-source_session_mgr = SessionManager(source_engine)
-target_session_mgr = SessionManager(target_engine)
-
-source_repo = SQLAlchemyCRUDRepository(source_session_mgr)
-target_repo = SQLAlchemyCRUDRepository(target_session_mgr)
-
-# 迁移所有记录
-with source_session_mgr.session_scope() as source_session:
-    with target_session_mgr.session_scope() as target_session:
-        # 批量迁移
-        page_size = 1000
-        offset = 0
-        
-        while True:
-            rows = source_repo.list(
-                source_session,
-                User,  # 你的模型
-                QuerySpec(limit=page_size, offset=offset)
-            )
-            
-            if not rows:
-                break
-            
-            for row in rows:
-                target_repo.add(target_session, row)
-            
-            target_session.commit()
-            offset += page_size
-```
-
-### MySQL → PostgreSQL
+### 备份数据库
 
 ```python
-# 类似上面的迁移流程，只需改变目标引擎配置
+import shutil
+from datetime import datetime
 
-target_engine = EngineManager().create(EngineConfig(
-    dialect="postgresql",
-    database="mofox_new",
-    username="postgres",
-    password="password",
-    host="localhost",
-    port=5432
-))
-```
-
-### 数据库 → Redis（缓存预热）
-
-```python
-from kernel.db.optimization import create_redis_cache_manager
-
-# 从数据库加载热数据到 Redis
-cache_mgr = create_redis_cache_manager(redis_client, key_prefix="user:")
-
-with repo.session_scope() as session:
-    users = repo.list(session, User, QuerySpec(limit=10000))
+def backup_database(db_path, backup_dir="backups"):
+    """创建数据库备份"""
+    import os
+    os.makedirs(backup_dir, exist_ok=True)
     
-    for user in users:
-        # 缓存用户信息 1 天
-        cache_mgr.backend.set(
-            f"user:{user.id}",
-            pickle.dumps(user),
-            ex=86400
-        )
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_path = f"{backup_dir}/app_{timestamp}.db"
+    
+    shutil.copy2(db_path, backup_path)
+    print(f"备份完成：{backup_path}")
+    
+    return backup_path
+
+# 使用
+backup_database("data/app.db")
+```
+
+### 恢复数据库
+
+```python
+def restore_database(backup_path, target_path):
+    """从备份恢复数据库"""
+    import shutil
+    
+    shutil.copy2(backup_path, target_path)
+    print(f"恢复完成：{target_path}")
+
+# 使用
+restore_database("backups/app_20240101_120000.db", "data/app.db")
+```
+
+### 数据库迁移
+
+使用 SQLAlchemy 的 Alembic 工具：
+
+```bash
+# 初始化迁移环境
+alembic init alembic
+
+# 创建迁移脚本
+alembic revision --autogenerate -m "添加用户表"
+
+# 应用迁移
+alembic upgrade head
+
+# 回滚迁移
+alembic downgrade -1
+```
+
+---
+
+## 多环境配置
+
+### 开发环境（dev）
+
+```python
+from kernel.db.core import create_sqlite_engine
+
+dev_engine = create_sqlite_engine(
+    database="data/dev.db",
+    echo=True,                        # 显示 SQL
+    pool_size=5,
+    enable_wal=True,
+)
+```
+
+### 测试环境（test）
+
+```python
+# 使用内存数据库，每次测试独立
+test_engine = create_sqlite_engine(
+    database=":memory:",
+    echo=False,
+    pool_size=1,
+)
+```
+
+### 生产环境（prod）
+
+```python
+prod_engine = create_sqlite_engine(
+    database="data/prod.db",
+    echo=False,                       # 不显示 SQL
+    pool_size=20,
+    pool_timeout=60,
+    enable_wal=True,
+    enable_foreign_keys=True,
+    synchronous="NORMAL",
+    timeout=30,
+)
+```
+
+---
+
+## 监控和维护
+
+### 数据库统计
+
+```python
+def get_db_stats(engine):
+    """获取数据库统计信息"""
+    with engine.connect() as conn:
+        # 数据库文件大小
+        import os
+        db_path = engine.url.database
+        file_size = os.path.getsize(db_path)
+        
+        # 表数量
+        result = conn.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+        table_count = result.scalar()
+        
+        # WAL 模式
+        wal_result = conn.execute("PRAGMA journal_mode")
+        wal_mode = wal_result.scalar()
+        
+        return {
+            "file_size": file_size,
+            "table_count": table_count,
+            "wal_mode": wal_mode,
+        }
+
+# 使用
+stats = get_db_stats(engine)
+print(f"数据库大小：{stats['file_size']} 字节")
+print(f"表数量：{stats['table_count']}")
+print(f"日志模式：{stats['wal_mode']}")
+```
+
+### 定期维护
+
+```python
+def maintenance_task(engine):
+    """定期数据库维护"""
+    with engine.connect() as conn:
+        # 分析表以优化查询
+        conn.execute("ANALYZE")
+        
+        # 检查完整性
+        result = conn.execute("PRAGMA integrity_check")
+        check = result.scalar()
+        
+        print(f"完整性检查：{check}")
+        
+        conn.commit()
+
+# 定时运行（例如每天一次）
+import schedule
+schedule.every().day.at("02:00").do(maintenance_task, engine=engine)
 ```
 
 ---
 
 ## 最佳实践总结
 
-| 场景 | 推荐 | 理由 |
-|------|------|------|
-| **开发环境** | SQLite | 零配置，快速启动 |
-| **小型生产** | MySQL | 成熟、易维护 |
-| **大型生产** | PostgreSQL | 性能优、功能完整 |
-| **缓存层** | Redis | 极速访问 |
-| **日志存储** | MongoDB | 灵活、易扩展 |
-| **混合** | MySQL + Redis | 关系数据 + 缓存 |
-| **完整栈** | PostgreSQL + Redis + MongoDB | 最优组合 |
+| 实践 | 说明 |
+|------|------|
+| **启用 WAL** | 提高并发性能，推荐所有生产环境 |
+| **设置合理超时** | 避免无限期锁定 |
+| **启用外键** | 保证数据完整性 |
+| **定期备份** | 自动化备份关键数据库 |
+| **使用索引** | 加速频繁查询字段 |
+| **批量操作** | 使用 add_many/delete_many 提高效率 |
+| **监控大小** | 定期检查文件大小，必要时优化 |
+| **记录日志** | 调试期间启用 SQL 日志 |
 
 ---
 
-**更新时间** | 2026 年 1月 6日
+**最后更新** | 2026 年 1 月 8 日
 
