@@ -2,6 +2,13 @@
 Logger 与 Storage 模块集成示例
 
 展示如何使用 LogStoreHandler 将日志直接存储到 JSON 文件中
+支持 Python 和 C++ 两个后端版本
+
+使用 C++ 版本：
+    logger_with_storage = LoggerWithStorage(
+        app_name="myapp",
+        use_cpp_storage=True
+    )
 """
 import logging
 from pathlib import Path
@@ -16,18 +23,19 @@ from kernel.logger import (
 )
 
 # 导入 storage 模块
-from kernel.storage import LogStore
+from kernel.storage import LogStore, use_cpp_version, get_current_backend
 
 
 class LoggerWithStorage:
-    """集成 Logger 和 Storage 的日志系统"""
+    """集成 Logger 和 Storage 的日志系统（支持 Python 和 C++ 后端）"""
     
     def __init__(
         self,
         app_name: str = "myapp",
         log_dir: str = "logs",
         console_output: bool = True,
-        json_storage: bool = True
+        json_storage: bool = True,
+        use_cpp_storage: bool = False  # 是否使用 C++ 版本
     ):
         """
         初始化日志系统（集成存储）
@@ -37,10 +45,17 @@ class LoggerWithStorage:
             log_dir: 日志目录
             console_output: 是否输出到控制台
             json_storage: 是否存储到 JSON 文件
+            use_cpp_storage: 是否使用 C++ 版本（默认使用 Python）
         """
         self.app_name = app_name
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 切换存储后端
+        if use_cpp_storage:
+            cpp_available = use_cpp_version(True)
+            backend = "C++ (高性能)" if cpp_available else "Python (备用)"
+            print(f"[Logger] 使用 {backend} 存储后端")
         
         # 创建日志存储器
         if json_storage:
@@ -50,8 +65,10 @@ class LoggerWithStorage:
                 max_entries_per_file=1000,
                 auto_rotate=True
             )
+            self.backend = get_current_backend()
         else:
             self.log_store = None
+            self.backend = None
         
         # 配置 logger
         config = LoggerConfig(
