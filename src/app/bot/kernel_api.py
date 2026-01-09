@@ -36,7 +36,12 @@ from kernel.llm import (
     MessageBuilder,
     ToolBuilder,
     get_system_prompt,
-    PromptTemplates
+    PromptTemplates,
+    # 视频处理 (inkfox)
+    VideoKeyframeExtractor,
+    extract_keyframes_from_video,
+    check_inkfox_available,
+    INKFOX_AVAILABLE
 )
 
 # ==================== 日志 ====================
@@ -387,6 +392,122 @@ class MoFoxKernel:
                 系统提示词
             """
             return get_system_prompt(prompt_type)
+        
+        # ==================== 视频处理接口 (inkfox) ====================
+        
+        def check_video_support(self) -> bool:
+            """
+            检查是否支持视频处理
+            
+            Returns:
+                bool: True 表示 inkfox 可用
+            """
+            return check_inkfox_available()
+        
+        def extract_video_keyframes(
+            self,
+            video_path: str,
+            output_dir: str,
+            max_keyframes: int = 10,
+            max_save: Optional[int] = None,
+            use_simd: Optional[bool] = None,
+            threads: Optional[int] = None,
+            verbose: bool = False
+        ) -> Dict[str, Any]:
+            """
+            从视频中提取关键帧
+            
+            Args:
+                video_path: 视频文件路径
+                output_dir: 输出目录
+                max_keyframes: 最大关键帧数量（默认 10）
+                max_save: 最大保存数量（None=全部保存）
+                use_simd: 是否使用 SIMD 加速（None=自动）
+                threads: 线程数（None=自动）
+                verbose: 是否输出详细日志
+            
+            Returns:
+                dict: 提取结果，包含帧数、耗时等信息
+            
+            Raises:
+                RuntimeError: inkfox 不可用或提取失败
+                FileNotFoundError: 视频文件不存在
+            
+            Example:
+                >>> result = kernel.llm.extract_video_keyframes(
+                ...     video_path="video.mp4",
+                ...     output_dir="./keyframes",
+                ...     max_keyframes=15
+                ... )
+                >>> print(f"提取了 {result['keyframes_extracted']} 个关键帧")
+            """
+            if not check_inkfox_available():
+                raise RuntimeError(
+                    "inkfox 视频处理模块不可用。请安装: pip install inkfox"
+                )
+            
+            self.logger.info(
+                "开始提取视频关键帧: %s (max_keyframes=%d)",
+                video_path, max_keyframes
+            )
+            
+            result = extract_keyframes_from_video(
+                video_path=video_path,
+                output_dir=output_dir,
+                max_keyframes=max_keyframes,
+                max_save=max_save,
+                use_simd=use_simd,
+                threads=threads,
+                verbose=verbose
+            )
+            
+            self.logger.info(
+                "关键帧提取完成: 总帧数=%d, 关键帧数=%d, 耗时=%.2fms",
+                result['total_frames'],
+                result['keyframes_extracted'],
+                result['total_time_ms']
+            )
+            
+            return result
+        
+        def create_video_extractor(
+            self,
+            ffmpeg_path: Optional[str] = None,
+            threads: int = 0,
+            verbose: bool = False
+        ) -> VideoKeyframeExtractor:
+            """
+            创建视频关键帧提取器实例
+            
+            Args:
+                ffmpeg_path: FFmpeg 可执行文件路径（None=自动查找）
+                threads: 线程数（0=自动）
+                verbose: 是否输出详细日志
+            
+            Returns:
+                VideoKeyframeExtractor: 提取器实例
+            
+            Raises:
+                RuntimeError: inkfox 不可用
+            
+            Example:
+                >>> extractor = kernel.llm.create_video_extractor(threads=4)
+                >>> result = extractor.extract_keyframes(
+                ...     video_path="video.mp4",
+                ...     output_dir="./output",
+                ...     max_keyframes=20
+                ... )
+            """
+            if not check_inkfox_available():
+                raise RuntimeError(
+                    "inkfox 视频处理模块不可用。请安装: pip install inkfox"
+                )
+            
+            return VideoKeyframeExtractor(
+                ffmpeg_path=ffmpeg_path,
+                threads=threads,
+                verbose=verbose
+            )
     
     @property
     def llm(self) -> LLMInterface:

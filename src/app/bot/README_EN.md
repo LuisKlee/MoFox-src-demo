@@ -14,6 +14,7 @@
 ✅ **Clean API** - High-level convenience methods  
 ✅ **Type Hints** - Full type annotation support  
 ✅ **Async First** - Native async/await support  
+✅ **Video Processing** - Integrated inkfox high-performance video keyframe extraction (Rust accelerated)  
 
 ## Quick Start
 
@@ -98,6 +99,80 @@ value = config.get("nested.key.path")
 kernel.logger.info("Info log")
 kernel.logger.warning("Warning log")
 kernel.logger.error("Error log")
+```
+
+### 3. LLM and Video Processing
+
+#### Basic Chat
+```python
+# Simple conversation
+response = await kernel.llm.chat(
+    message="Hello, introduce yourself",
+    model="gpt-4",
+    system_prompt="You are a friendly assistant"
+)
+print(response)
+
+# Streaming conversation
+async for chunk in kernel.llm.chat_stream(
+    message="Tell me a story",
+    model="gpt-4"
+):
+    print(chunk, end="", flush=True)
+```
+
+#### Video Keyframe Extraction (inkfox)
+
+**Note**: Requires inkfox and FFmpeg
+```bash
+pip install inkfox  # Python >= 3.11
+```
+
+```python
+# Check video processing support
+if kernel.llm.check_video_support():
+    print("✅ inkfox video processing available")
+else:
+    print("❌ inkfox not available, please install")
+
+# Quick keyframe extraction
+result = kernel.llm.extract_video_keyframes(
+    video_path="video.mp4",
+    output_dir="./keyframes",
+    max_keyframes=10,
+    use_simd=True  # SIMD acceleration
+)
+
+print(f"Extracted {result['keyframes_extracted']} keyframes")
+print(f"Total frames: {result['total_frames']}")
+print(f"Processing speed: {result['processing_fps']:.2f} FPS")
+print(f"Time taken: {result['total_time_ms']:.2f}ms")
+
+# Advanced usage: Create extractor instance
+extractor = kernel.llm.create_video_extractor(
+    threads=4,
+    verbose=True
+)
+
+# Get CPU features
+cpu_features = extractor.get_cpu_features()
+print(f"CPU features: {cpu_features}")
+
+# Extract keyframes
+result = extractor.extract_keyframes(
+    video_path="video.mp4",
+    output_dir="./output",
+    max_keyframes=20,
+    use_simd=True
+)
+
+# Performance benchmark
+benchmark = extractor.benchmark(
+    video_path="video.mp4",
+    max_keyframes=10,
+    test_name="Performance Test"
+)
+print(f"Performance: {benchmark['processing_fps']:.2f} FPS")
 
 # Get named logger
 module_logger = kernel.get_logger("app.module")
@@ -626,6 +701,57 @@ for task in all_tasks:
     print(f"{task.name}: {task.state}")
 ```
 
+### Q: How to use video processing features?
+
+```python
+# Check support
+if not kernel.llm.check_video_support():
+    print("Please install inkfox: pip install inkfox")
+    return
+
+# Extract keyframes
+result = kernel.llm.extract_video_keyframes(
+    video_path="video.mp4",
+    output_dir="./keyframes",
+    max_keyframes=10,
+    use_simd=True  # SIMD acceleration
+)
+
+print(f"Extracted {result['keyframes_extracted']} keyframes")
+print(f"Processing speed: {result['processing_fps']:.2f} FPS")
+
+# Note: Requires Python >= 3.11 and FFmpeg
+```
+
+### Q: How to combine LLM with video analysis?
+
+```python
+# 1. Extract keyframes
+result = kernel.llm.extract_video_keyframes(
+    video_path="video.mp4",
+    output_dir="./keyframes",
+    max_keyframes=5
+)
+
+# 2. Convert keyframes to Base64 (using image tools from kernel.llm)
+from kernel.llm import image_to_base64
+from pathlib import Path
+
+keyframe_files = sorted(Path("./keyframes").glob("keyframe_*.jpg"))
+image_urls = []
+for frame in keyframe_files[:3]:  # Take first 3
+    base64_str = image_to_base64(str(frame), compress=True)
+    image_urls.append(f"data:image/jpeg;base64,{base64_str}")
+
+# 3. Send to vision LLM for analysis
+response = await kernel.llm.chat(
+    message="Please analyze these video keyframes and describe the main content and scenes",
+    model="gpt-4-vision",
+    images=image_urls  # Multimodal input
+)
+print(response)
+```
+
 ## Example Code
 
 See complete examples at: [examples/kernel_api_demo.py](../../examples/kernel_api_demo.py)
@@ -635,6 +761,7 @@ See complete examples at: [examples/kernel_api_demo.py](../../examples/kernel_ap
 - [Config Module](../../docs/kernel/config/README.md)
 - [Database Module](../../docs/kernel/db/README.md)
 - [LLM Module](../../docs/kernel/llm/README.md)
+- [inkfox Video Processing Integration](../../docs/kernel/llm/INKFOX_INTEGRATION.md) ✨
 - [Logger Module](../../docs/kernel/logger/README.md)
 - [Storage Module](../../docs/kernel/storage/README.md)
 - [Vector DB Module](../../docs/kernel/vector_db/README.md)

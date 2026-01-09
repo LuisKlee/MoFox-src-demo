@@ -14,6 +14,7 @@
 ✅ **简洁 API** - 提供高层次的便捷方法  
 ✅ **类型提示** - 完整的类型注解支持  
 ✅ **异步优先** - 原生支持 async/await  
+✅ **视频处理** - 集成 inkfox 高性能视频关键帧提取（Rust 加速）  
 
 ## 快速开始
 
@@ -98,6 +99,80 @@ value = config.get("nested.key.path")
 kernel.logger.info("信息日志")
 kernel.logger.warning("警告日志")
 kernel.logger.error("错误日志")
+```
+
+### 3. LLM 和视频处理
+
+#### 基础聊天
+```python
+# 简单对话
+response = await kernel.llm.chat(
+    message="你好，介绍一下自己",
+    model="gpt-4",
+    system_prompt="你是一个友好的助手"
+)
+print(response)
+
+# 流式对话
+async for chunk in kernel.llm.chat_stream(
+    message="讲个故事",
+    model="gpt-4"
+):
+    print(chunk, end="", flush=True)
+```
+
+#### 视频关键帧提取（inkfox）
+
+**注意**: 需要安装 inkfox 和 FFmpeg
+```bash
+pip install inkfox  # Python >= 3.11
+```
+
+```python
+# 检查视频处理支持
+if kernel.llm.check_video_support():
+    print("✅ inkfox 视频处理可用")
+else:
+    print("❌ inkfox 不可用，请安装")
+
+# 快速提取关键帧
+result = kernel.llm.extract_video_keyframes(
+    video_path="video.mp4",
+    output_dir="./keyframes",
+    max_keyframes=10,
+    use_simd=True  # SIMD 加速
+)
+
+print(f"提取了 {result['keyframes_extracted']} 个关键帧")
+print(f"总帧数: {result['total_frames']}")
+print(f"处理速度: {result['processing_fps']:.2f} FPS")
+print(f"耗时: {result['total_time_ms']:.2f}ms")
+
+# 高级用法：创建提取器实例
+extractor = kernel.llm.create_video_extractor(
+    threads=4,
+    verbose=True
+)
+
+# 获取 CPU 特性
+cpu_features = extractor.get_cpu_features()
+print(f"CPU 特性: {cpu_features}")
+
+# 提取关键帧
+result = extractor.extract_keyframes(
+    video_path="video.mp4",
+    output_dir="./output",
+    max_keyframes=20,
+    use_simd=True
+)
+
+# 性能测试
+benchmark = extractor.benchmark(
+    video_path="video.mp4",
+    max_keyframes=10,
+    test_name="性能测试"
+)
+print(f"性能: {benchmark['processing_fps']:.2f} FPS")
 
 # 获取命名日志器
 module_logger = kernel.get_logger("app.module")
@@ -626,6 +701,57 @@ for task in all_tasks:
     print(f"{task.name}: {task.state}")
 ```
 
+### Q: 如何使用视频处理功能？
+
+```python
+# 检查是否支持
+if not kernel.llm.check_video_support():
+    print("请安装 inkfox: pip install inkfox")
+    return
+
+# 提取关键帧
+result = kernel.llm.extract_video_keyframes(
+    video_path="video.mp4",
+    output_dir="./keyframes",
+    max_keyframes=10,
+    use_simd=True  # SIMD 加速
+)
+
+print(f"提取了 {result['keyframes_extracted']} 个关键帧")
+print(f"处理速度: {result['processing_fps']:.2f} FPS")
+
+# 注意：需要 Python >= 3.11 和 FFmpeg
+```
+
+### Q: 如何结合 LLM 分析视频内容？
+
+```python
+# 1. 提取关键帧
+result = kernel.llm.extract_video_keyframes(
+    video_path="video.mp4",
+    output_dir="./keyframes",
+    max_keyframes=5
+)
+
+# 2. 将关键帧转为 Base64﻿（使用 kernel.llm 中的图像处理工具）
+from kernel.llm import image_to_base64
+from pathlib import Path
+
+keyframe_files = sorted(Path("./keyframes").glob("keyframe_*.jpg"))
+image_urls = []
+for frame in keyframe_files[:3]:  # 只取前3个
+    base64_str = image_to_base64(str(frame), compress=True)
+    image_urls.append(f"data:image/jpeg;base64,{base64_str}")
+
+# 3. 发送给视觉 LLM 分析
+response = await kernel.llm.chat(
+    message="请分析这些视频关键帧，描述主要内容和场景",
+    model="gpt-4-vision",
+    images=image_urls  # 多模态输入
+)
+print(response)
+```
+
 ## 示例代码
 
 完整示例请查看：[examples/kernel_api_demo.py](../../examples/kernel_api_demo.py)
@@ -635,6 +761,7 @@ for task in all_tasks:
 - [Config 模块](../../docs/kernel/config/README.md)
 - [Database 模块](../../docs/kernel/db/README.md)
 - [LLM 模块](../../docs/kernel/llm/README.md)
+- [inkfox 视频处理集成](../../docs/kernel/llm/INKFOX_INTEGRATION.md) ✨
 - [Logger 模块](../../docs/kernel/logger/README.md)
 - [Storage 模块](../../docs/kernel/storage/README.md)
 - [Vector DB 模块](../../docs/kernel/vector_db/README.md)
