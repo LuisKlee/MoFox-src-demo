@@ -2,34 +2,15 @@
 
 本文档提供 Storage 模块的完整 API 参考，包括所有类、方法、参数和返回值的详细说明。
 
-**注意**: 本文档主要介绍 Python 版本。C++ 版本的 API 文档请参考 [C++ 实现指南](./CPP_IMPLEMENTATION.md)。
-
 ---
 
 ## 目录
 
-- [版本选择](#版本选择)
 - [JSONStore](#jsonstore)
 - [DictJSONStore](#dictjsonstore)
 - [ListJSONStore](#listjsonstore)
 - [LogStore](#logstore)
 - [异常类](#异常类)
-
----
-
-## 版本选择
-
-### Python vs C++
-
-| 方面 | Python | C++ |
-|------|--------|-----|
-| **适用场景** | 快速开发、原型设计 | 性能关键、生产环境 |
-| **性能** | 基准 | ⚡ 5-10倍更快 |
-| **易用性** | 🟢 极简 | 🟡 需要编译 |
-| **类型安全** | 弱类型 | 强类型 |
-| **学习成本** | 低 | 中等 |
-
-选择 Python 版本继续使用本文档。选择 C++ 版本请参考 [C++ 实现指南](./CPP_IMPLEMENTATION.md) 和 [快速参考](../../src/kernel/storage/QUICK_REFERENCE.md)。
 
 ---
 
