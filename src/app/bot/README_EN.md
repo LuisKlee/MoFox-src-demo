@@ -1,292 +1,292 @@
-# MoFox Kernel API 使用文档
+# MoFox Kernel API Documentation
 
-中文 | [English](README_EN.md)
+[中文文档](README.md) | English
 
-## 概述
+## Overview
 
-`kernel_api.py` 提供了 MoFox Kernel 层的统一高级封装接口，将所有核心功能（配置、日志、数据库、LLM、存储、向量数据库、任务管理）整合到一个简洁易用的 API 中。
+`kernel_api.py` provides a unified high-level wrapper interface for the MoFox Kernel layer, integrating all core functionalities (configuration, logging, database, LLM, storage, vector database, task management) into a simple and easy-to-use API.
 
-## 核心特性
+## Core Features
 
-✅ **统一接口** - 一个类管理所有 Kernel 功能  
-✅ **自动初始化** - 智能初始化各个子模块  
-✅ **资源管理** - 自动管理生命周期和资源释放  
-✅ **简洁 API** - 提供高层次的便捷方法  
-✅ **类型提示** - 完整的类型注解支持  
-✅ **异步优先** - 原生支持 async/await  
+✅ **Unified Interface** - One class to manage all Kernel functions  
+✅ **Auto Initialization** - Smart initialization of sub-modules  
+✅ **Resource Management** - Automatic lifecycle and resource cleanup  
+✅ **Clean API** - High-level convenience methods  
+✅ **Type Hints** - Full type annotation support  
+✅ **Async First** - Native async/await support  
 
-## 快速开始
+## Quick Start
 
-### 基础使用
+### Basic Usage
 
 ```python
 from src.app.bot.kernel_api import init_kernel, shutdown_kernel
 
 async def main():
-    # 初始化 kernel
+    # Initialize kernel
     kernel = await init_kernel(
         app_name="my_app",
         log_dir="logs",
         data_dir="data"
     )
     
-    # 使用日志
-    kernel.logger.info("应用已启动")
+    # Use logger
+    kernel.logger.info("Application started")
     
-    # 使用配置
+    # Use configuration
     kernel.set_config("debug", True)
     debug = kernel.get_config("debug")
     
-    # 关闭 kernel
+    # Shutdown kernel
     await shutdown_kernel()
 
 import asyncio
 asyncio.run(main())
 ```
 
-### 完整示例
+### Complete Example
 
 ```python
 from src.app.bot.kernel_api import MoFoxKernel
 
 async def main():
-    # 创建 kernel 实例
+    # Create kernel instance
     kernel = MoFoxKernel(
         app_name="advanced_app",
-        config_path="config.json",  # 可选
+        config_path="config.json",  # Optional
         log_dir="logs",
         data_dir="data",
-        max_concurrent_tasks=20  # 其他配置
+        max_concurrent_tasks=20  # Other configurations
     )
     
-    # 初始化所有组件
+    # Initialize all components
     await kernel.initialize()
     
     try:
-        # 你的应用逻辑
-        kernel.logger.info("应用运行中...")
+        # Your application logic
+        kernel.logger.info("Application running...")
         
     finally:
-        # 清理资源
+        # Cleanup resources
         await kernel.shutdown()
 
 asyncio.run(main())
 ```
 
-## 功能模块
+## Functional Modules
 
-### 1. 配置管理
+### 1. Configuration Management
 
 ```python
-# 设置配置
+# Set configuration
 kernel.set_config("api_key", "your-key")
 kernel.set_config("database.host", "localhost")
 
-# 获取配置
+# Get configuration
 api_key = kernel.get_config("api_key")
 host = kernel.get_config("database.host", "default_host")
 
-# 访问底层配置对象
+# Access underlying config object
 config = kernel.config
 value = config.get("nested.key.path")
 ```
 
-### 2. 日志管理
+### 2. Logging Management
 
 ```python
-# 获取默认日志器
-kernel.logger.info("信息日志")
-kernel.logger.warning("警告日志")
-kernel.logger.error("错误日志")
+# Get default logger
+kernel.logger.info("Info log")
+kernel.logger.warning("Warning log")
+kernel.logger.error("Error log")
 
-# 获取命名日志器
+# Get named logger
 module_logger = kernel.get_logger("app.module")
-module_logger.debug("模块日志")
+module_logger.debug("Module log")
 
-# 查询日志统计
+# Query log statistics
 stats = kernel.get_logs(days=7)
 # {'total': 100, 'by_level': {...}, 'by_logger': {...}}
 
-# 查询错误日志
+# Query error logs
 errors = kernel.get_error_logs(days=1)
 for error in errors:
     print(f"{error['timestamp']}: {error['message']}")
 ```
 
-### 3. LLM 功能
+### 3. LLM Features
 
 ```python
-# 简单聊天
+# Simple chat
 response = await kernel.llm.chat(
-    "用一句话介绍 Python",
+    "Introduce Python in one sentence",
     model="gpt-4",
     provider="openai"
 )
 print(response)
 
-# 流式聊天
+# Streaming chat
 async for chunk in kernel.llm.chat_stream(
-    "讲个故事",
+    "Tell me a story",
     model="gpt-4"
 ):
     print(chunk, end="", flush=True)
 
-# 使用系统提示词
+# Use system prompt
 system_prompt = kernel.llm.get_system_prompt("coding")
 response = await kernel.llm.chat(
-    "如何读取文件？",
+    "How to read a file?",
     system_prompt=system_prompt
 )
 
-# 工具调用
+# Tool calling
 tool = kernel.llm.create_tool(
     name="get_weather",
-    description="获取天气信息",
+    description="Get weather information",
     parameters=[
         {
             "name": "city",
             "type": "string",
-            "description": "城市名称",
+            "description": "City name",
             "required": True
         }
     ]
 )
 
 response = await kernel.llm.chat_with_tools(
-    "北京天气如何？",
+    "What's the weather in Beijing?",
     tools=[tool]
 )
 
 if response.tool_calls:
     for call in response.tool_calls:
-        print(f"调用工具: {call['function']['name']}")
-        print(f"参数: {call['function']['arguments']}")
+        print(f"Tool called: {call['function']['name']}")
+        print(f"Arguments: {call['function']['arguments']}")
 
-# 创建多模态消息
+# Create multimodal message
 message = kernel.llm.create_message(
-    "这是什么？",
+    "What is this?",
     images=["image.jpg"]
 )
 ```
 
-### 4. 数据库操作
+### 4. Database Operations
 
 ```python
-# 初始化数据库
+# Initialize database
 await kernel.init_database(
     db_path="data/app.db",
     enable_wal=True,
     pool_size=20
 )
 
-# 使用会话
+# Use session
 async with kernel.db_session() as session:
-    # CRUD 操作
+    # CRUD operations
     user = User(name="Alice", age=25)
     kernel.db.add(session, user, flush=True)
     
-    # 查询
+    # Query
     users = kernel.db.list(session, User)
     user = kernel.db.get(session, User, user_id)
     
-    # 更新
+    # Update
     kernel.db.update_fields(session, user, {"age": 26})
     
-    # 删除
+    # Delete
     kernel.db.delete(session, user)
 
-# 直接访问数据库仓库
+# Direct access to database repository
 repo = kernel.db
 ```
 
-### 5. 存储操作
+### 5. Storage Operations
 
 ```python
-# 快速保存/加载
+# Quick save/load
 kernel.storage.save("config", {"version": "1.0"})
 config = kernel.storage.load("config", default={})
 
-# JSON 存储器
+# JSON storage
 json_store = kernel.storage.json_store("settings")
 json_store.write({"key": "value"})
 data = json_store.read()
 
-# 字典存储器
+# Dictionary storage
 dict_store = kernel.storage.dict_store("users")
 dict_store.set("user1", {"name": "Alice"})
 dict_store.set("user2", {"name": "Bob"})
 user = dict_store.get("user1")
 all_users = dict_store.to_dict()
 
-# 列表存储器
+# List storage
 list_store = kernel.storage.list_store("events")
 list_store.append({"type": "login", "user": "Alice"})
 list_store.extend([event1, event2])
 events = list_store.to_list()
 count = list_store.count()
 
-# 日志存储器
+# Log storage
 log_store = kernel.storage.log_store("app_logs")
 log_store.log("info", "Application started")
 log_store.log("error", "Error occurred", {"code": 500})
 logs = log_store.get_logs()
 ```
 
-### 6. 向量数据库
+### 6. Vector Database
 
 ```python
-# 初始化向量数据库
+# Initialize vector database
 await kernel.init_vector_db(
     db_type="chromadb",
     persist_dir="data/vectors"
 )
 
-# 创建集合
+# Create collection
 await kernel.vector_db.create_collection("documents")
 
-# 添加文档
+# Add documents
 from src.app.bot.kernel_api import VectorDocument
 
 docs = [
     VectorDocument(
         id="doc1",
-        content="Python 编程语言",
+        content="Python programming language",
         vector=[0.1, 0.2, 0.3],
         metadata={"category": "tech"}
     )
 ]
 await kernel.vector_db.add_documents("documents", docs)
 
-# 向量搜索（使用向量）
+# Vector search (using vector)
 results = await kernel.vector_search(
     collection="documents",
     query=[0.15, 0.25, 0.35],
     top_k=5
 )
 
-# 文本搜索（需要嵌入函数）
+# Text search (requires embedding function)
 results = await kernel.vector_search(
     collection="documents",
-    query="Python 编程",
+    query="Python programming",
     top_k=5
 )
 
-# 管理集合
+# Manage collections
 collections = await kernel.vector_db.list_collections()
 exists = await kernel.vector_db.collection_exists("documents")
 count = await kernel.vector_db.count_documents("documents")
 await kernel.vector_db.delete_collection("documents")
 ```
 
-### 7. 任务管理
+### 7. Task Management
 
 ```python
-# 定义异步任务
+# Define async task
 async def process_data(data):
     await asyncio.sleep(1)
     return data * 2
 
-# 运行单个任务
+# Run single task
 result = await kernel.run_task(
     process_data,
     42,
@@ -294,7 +294,7 @@ result = await kernel.run_task(
     name="process_task"
 )
 
-# 并行运行多个任务
+# Run multiple tasks in parallel
 tasks = [
     (process_data, (10,)),
     (process_data, (20,)),
@@ -303,7 +303,7 @@ tasks = [
 results = await kernel.run_tasks_parallel(tasks)
 # [20, 40, 60]
 
-# 使用任务管理器
+# Use task manager
 task_id = kernel.tasks.submit_task(
     process_data,
     100,
@@ -311,22 +311,22 @@ task_id = kernel.tasks.submit_task(
     config=TaskConfig(priority=TaskPriority.HIGH)
 )
 
-# 等待任务完成
+# Wait for task completion
 result = await kernel.tasks.wait_for_task(task_id)
 
-# 查询任务状态
+# Query task status
 status = kernel.tasks.get_task_status(task_id)
 
-# 取消任务
+# Cancel task
 kernel.tasks.cancel_task(task_id)
 
-# 获取所有任务
+# Get all tasks
 all_tasks = kernel.tasks.get_all_tasks()
 ```
 
-## 高级用法
+## Advanced Usage
 
-### 上下文管理器
+### Context Managers
 
 ```python
 from src.app.bot.kernel_api import MoFoxKernel
@@ -336,69 +336,69 @@ async def main():
     await kernel.initialize()
     
     try:
-        # 数据库会话
+        # Database session
         async with kernel.db_session() as session:
-            # 数据库操作
+            # Database operations
             pass
         
-        # 日志元数据上下文
+        # Log metadata context
         from src.app.bot.kernel_api import MetadataContext
         with MetadataContext(user_id="123", request_id="req_456"):
-            kernel.logger.info("带元数据的日志")
+            kernel.logger.info("Log with metadata")
     
     finally:
         await kernel.shutdown()
 ```
 
-### 组合使用
+### Combined Usage
 
 ```python
 async def intelligent_qa_system():
-    """智能问答系统示例"""
+    """Intelligent Q&A system example"""
     kernel = await init_kernel(app_name="qa_system")
     
-    # 初始化所有组件
+    # Initialize all components
     await kernel.init_database("data/qa.db")
     await kernel.init_vector_db(persist_dir="data/vectors")
     
-    # 1. 存储问答知识库
+    # 1. Store Q&A knowledge base
     qa_store = kernel.storage.dict_store("knowledge")
     qa_store.set("python", {
-        "question": "什么是 Python？",
-        "answer": "Python 是一种编程语言"
+        "question": "What is Python?",
+        "answer": "Python is a programming language"
     })
     
-    # 2. 将知识存入向量数据库（用于语义搜索）
+    # 2. Store knowledge in vector database (for semantic search)
     await kernel.vector_db.create_collection("qa_vectors")
     doc = VectorDocument(
         id="q1",
-        content="什么是 Python？Python 是一种编程语言",
-        vector=[0.1, 0.2, 0.3],  # 实际应使用嵌入模型
+        content="What is Python? Python is a programming language",
+        vector=[0.1, 0.2, 0.3],  # Should use embedding model in practice
         metadata={"type": "qa"}
     )
     await kernel.vector_db.add_documents("qa_vectors", [doc])
     
-    # 3. 用户提问
-    user_question = "Python 是什么？"
-    kernel.logger.info(f"用户提问: {user_question}")
+    # 3. User question
+    user_question = "What is Python?"
+    kernel.logger.info(f"User question: {user_question}")
     
-    # 4. 语义搜索找到相关问题
+    # 4. Semantic search for relevant questions
     similar_docs = await kernel.vector_search(
         collection="qa_vectors",
-        query=user_question,  # 或使用嵌入向量
+        query=user_question,  # Or use embedding vector
         top_k=3
     )
     
-    # 5. 使用 LLM 生成答案
+    # 5. Generate answer using LLM
     context = "\n".join([doc.content for doc in similar_docs])
-    prompt = f"基于以下上下文回答问题:\n{context}\n\n问题: {user_question}"
+    prompt = f"Answer based on context:\n{context}\n\nQuestion: {user_question}"
     
     answer = await kernel.llm.chat(
         prompt,
         system_prompt=kernel.llm.get_system_prompt("education")
     )
     
-    # 6. 记录问答历史
+    # 6. Record Q&A history
     history = kernel.storage.list_store("qa_history")
     history.append({
         "question": user_question,
@@ -406,240 +406,240 @@ async def intelligent_qa_system():
         "timestamp": datetime.now().isoformat()
     })
     
-    kernel.logger.info(f"回答: {answer}")
+    kernel.logger.info(f"Answer: {answer}")
     
     await shutdown_kernel()
     return answer
 ```
 
-### 并发任务处理
+### Concurrent Task Processing
 
 ```python
 async def batch_processing():
-    """批量数据处理示例"""
+    """Batch data processing example"""
     kernel = await init_kernel(app_name="batch_processor")
     
-    # 定义处理任务
+    # Define processing task
     async def process_item(item_id):
-        # 从存储获取数据
+        # Get data from storage
         store = kernel.storage.dict_store("items")
         item = store.get(item_id)
         
-        # 使用 LLM 处理
+        # Process using LLM
         result = await kernel.llm.chat(
-            f"分析这个数据: {item}",
+            f"Analyze this data: {item}",
             model="gpt-4"
         )
         
-        # 保存结果
+        # Save result
         result_store = kernel.storage.dict_store("results")
         result_store.set(item_id, result)
         
-        kernel.logger.info(f"处理完成: {item_id}")
+        kernel.logger.info(f"Processing completed: {item_id}")
         return result
     
-    # 批量并行处理
+    # Batch parallel processing
     item_ids = [f"item_{i}" for i in range(10)]
     tasks = [(process_item, (item_id,)) for item_id in item_ids]
     
     results = await kernel.run_tasks_parallel(tasks)
     
-    kernel.logger.info(f"批量处理完成，共 {len(results)} 项")
+    kernel.logger.info(f"Batch processing completed, total {len(results)} items")
     
     await shutdown_kernel()
 ```
 
-## API 参考
+## API Reference
 
-### MoFoxKernel 类
+### MoFoxKernel Class
 
-| 方法/属性 | 说明 |
-|----------|------|
-| `__init__(app_name, config_path, log_dir, data_dir, **kwargs)` | 创建 Kernel 实例 |
-| `async initialize()` | 初始化所有组件 |
-| `async shutdown()` | 关闭并清理资源 |
-| `config` | 配置管理器 |
-| `logger` | 默认日志器 |
-| `llm` | LLM 接口 |
-| `storage` | 存储接口 |
-| `db` | 数据库仓库 |
-| `vector_db` | 向量数据库 |
-| `tasks` | 任务管理器 |
+| Method/Property | Description |
+|-----------------|-------------|
+| `__init__(app_name, config_path, log_dir, data_dir, **kwargs)` | Create Kernel instance |
+| `async initialize()` | Initialize all components |
+| `async shutdown()` | Shutdown and cleanup resources |
+| `config` | Configuration manager |
+| `logger` | Default logger |
+| `llm` | LLM interface |
+| `storage` | Storage interface |
+| `db` | Database repository |
+| `vector_db` | Vector database |
+| `tasks` | Task manager |
 
-### 便捷函数
+### Convenience Functions
 
-| 函数 | 说明 |
-|------|------|
-| `get_kernel(app_name, **kwargs)` | 获取全局 Kernel 单例 |
-| `init_kernel(app_name, **kwargs)` | 初始化并获取全局 Kernel |
-| `shutdown_kernel()` | 关闭全局 Kernel |
+| Function | Description |
+|----------|-------------|
+| `get_kernel(app_name, **kwargs)` | Get global Kernel singleton |
+| `init_kernel(app_name, **kwargs)` | Initialize and get global Kernel |
+| `shutdown_kernel()` | Shutdown global Kernel |
 
-## 配置选项
+## Configuration Options
 
-### Kernel 初始化参数
+### Kernel Initialization Parameters
 
 ```python
 kernel = MoFoxKernel(
-    app_name="my_app",              # 应用名称
-    config_path="config.json",      # 配置文件路径（可选）
-    log_dir="logs",                 # 日志目录
-    data_dir="data",                # 数据目录
-    max_concurrent_tasks=10,        # 最大并发任务数
-    # 其他自定义配置...
+    app_name="my_app",              # Application name
+    config_path="config.json",      # Config file path (optional)
+    log_dir="logs",                 # Log directory
+    data_dir="data",                # Data directory
+    max_concurrent_tasks=10,        # Max concurrent tasks
+    # Other custom configurations...
 )
 ```
 
-### 数据库初始化参数
+### Database Initialization Parameters
 
 ```python
 await kernel.init_database(
-    db_path="data/app.db",          # 数据库路径
-    pool_size=20,                   # 连接池大小
-    pool_timeout=60,                # 超时时间
-    enable_wal=True,                # WAL 模式
-    enable_foreign_keys=True        # 外键约束
+    db_path="data/app.db",          # Database path
+    pool_size=20,                   # Connection pool size
+    pool_timeout=60,                # Timeout
+    enable_wal=True,                # WAL mode
+    enable_foreign_keys=True        # Foreign key constraints
 )
 ```
 
-### 向量数据库初始化参数
+### Vector Database Initialization Parameters
 
 ```python
 await kernel.init_vector_db(
-    db_type="chromadb",             # 数据库类型
-    persist_dir="data/vectors",     # 持久化目录
-    # 其他数据库特定参数...
+    db_type="chromadb",             # Database type
+    persist_dir="data/vectors",     # Persistence directory
+    # Other database-specific parameters...
 )
 ```
 
-## 最佳实践
+## Best Practices
 
-### 1. 资源管理
+### 1. Resource Management
 
 ```python
-# ✅ 推荐：使用 init_kernel 和 shutdown_kernel
+# ✅ Recommended: Use init_kernel and shutdown_kernel
 async def main():
     kernel = await init_kernel("my_app")
     try:
-        # 应用逻辑
+        # Application logic
         pass
     finally:
         await shutdown_kernel()
 
-# ✅ 推荐：显式初始化和关闭
+# ✅ Recommended: Explicit initialization and shutdown
 async def main():
     kernel = MoFoxKernel("my_app")
     await kernel.initialize()
     try:
-        # 应用逻辑
+        # Application logic
         pass
     finally:
         await kernel.shutdown()
 ```
 
-### 2. 日志记录
+### 2. Logging
 
 ```python
-# ✅ 推荐：为不同模块使用不同的日志器
+# ✅ Recommended: Use different loggers for different modules
 class MyModule:
     def __init__(self, kernel):
         self.logger = kernel.get_logger("app.mymodule")
     
     async def process(self):
-        self.logger.info("开始处理")
+        self.logger.info("Processing started")
         # ...
-        self.logger.info("处理完成")
+        self.logger.info("Processing completed")
 ```
 
-### 3. 错误处理
+### 3. Error Handling
 
 ```python
-# ✅ 推荐：使用 try-except 处理异常
+# ✅ Recommended: Use try-except for exception handling
 try:
-    result = await kernel.llm.chat("问题")
+    result = await kernel.llm.chat("question")
 except Exception as e:
-    kernel.logger.error(f"LLM 调用失败: {e}")
-    # 降级处理
+    kernel.logger.error(f"LLM call failed: {e}")
+    # Fallback handling
 ```
 
-### 4. 存储组织
+### 4. Storage Organization
 
 ```python
-# ✅ 推荐：为不同类型的数据使用不同的存储器
+# ✅ Recommended: Use different stores for different data types
 config_store = kernel.storage.dict_store("config")
 users_store = kernel.storage.dict_store("users")
 events_store = kernel.storage.list_store("events")
 logs_store = kernel.storage.log_store("app_logs")
 ```
 
-## 常见问题
+## FAQ
 
-### Q: 如何配置 LLM API 密钥？
+### Q: How to configure LLM API keys?
 
 ```python
-# 方式 1：环境变量
+# Method 1: Environment variable
 import os
 os.environ["OPENAI_API_KEY"] = "your-key"
 
-# 方式 2：配置文件
+# Method 2: Configuration file
 kernel.set_config("openai.api_key", "your-key")
 
-# 方式 3：直接传递
+# Method 3: Direct passing
 response = await kernel.llm.chat(
-    "问题",
+    "question",
     api_key="your-key"
 )
 ```
 
-### Q: 如何处理并发限制？
+### Q: How to handle concurrency limits?
 
 ```python
-# 设置最大并发任务数
+# Set max concurrent tasks
 kernel = MoFoxKernel(
     app_name="my_app",
-    max_concurrent_tasks=5  # 最多同时运行 5 个任务
+    max_concurrent_tasks=5  # Max 5 concurrent tasks
 )
 ```
 
-### Q: 如何持久化向量数据库？
+### Q: How to persist vector database?
 
 ```python
-# 使用 persist_dir 参数
+# Use persist_dir parameter
 await kernel.init_vector_db(
     db_type="chromadb",
     persist_dir="data/persistent_vectors"
 )
 ```
 
-### Q: 如何查看任务执行状态？
+### Q: How to check task execution status?
 
 ```python
-# 提交任务
+# Submit task
 task_id = kernel.tasks.submit_task(my_func, arg)
 
-# 查看状态
+# Check status
 status = kernel.tasks.get_task_status(task_id)
-print(f"状态: {status.state}")  # PENDING, RUNNING, COMPLETED, FAILED
+print(f"Status: {status.state}")  # PENDING, RUNNING, COMPLETED, FAILED
 
-# 获取所有任务
+# Get all tasks
 all_tasks = kernel.tasks.get_all_tasks()
 for task in all_tasks:
     print(f"{task.name}: {task.state}")
 ```
 
-## 示例代码
+## Example Code
 
-完整示例请查看：[examples/kernel_api_demo.py](../../examples/kernel_api_demo.py)
+See complete examples at: [examples/kernel_api_demo.py](../../examples/kernel_api_demo.py)
 
-## 相关文档
+## Related Documentation
 
-- [Config 模块](../../docs/kernel/config/README.md)
-- [Database 模块](../../docs/kernel/db/README.md)
-- [LLM 模块](../../docs/kernel/llm/README.md)
-- [Logger 模块](../../docs/kernel/logger/README.md)
-- [Storage 模块](../../docs/kernel/storage/README.md)
-- [Vector DB 模块](../../docs/kernel/vector_db/README.md)
-- [Concurrency 模块](../../docs/kernel/concurrency/README.md)
+- [Config Module](../../docs/kernel/config/README.md)
+- [Database Module](../../docs/kernel/db/README.md)
+- [LLM Module](../../docs/kernel/llm/README.md)
+- [Logger Module](../../docs/kernel/logger/README.md)
+- [Storage Module](../../docs/kernel/storage/README.md)
+- [Vector DB Module](../../docs/kernel/vector_db/README.md)
+- [Concurrency Module](../../docs/kernel/concurrency/README.md)
 
-## 贡献
+## Contributing
 
-欢迎提交 Issue 和 Pull Request！
+Issues and Pull Requests are welcome!
