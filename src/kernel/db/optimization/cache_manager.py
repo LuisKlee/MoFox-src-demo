@@ -8,7 +8,7 @@ import hashlib
 import json
 from typing import Any, Callable, Optional
 
-from .backends import CacheBackend, LocalCache, RedisCache
+from .backends import CacheBackend, LocalCache
 
 
 class CacheManager:
@@ -308,37 +308,10 @@ def create_local_cache_manager(
     return CacheManager(backend=backend, default_ttl=default_ttl, key_prefix=key_prefix)
 
 
-def create_redis_cache_manager(
-    redis_client: Any,
-    prefix: str = "cache:",
-    default_ttl: int = 3600,
-    key_prefix: str = "",
-    serialize: bool = True
-) -> CacheManager:
-    """创建 Redis 缓存管理器
-    Create Redis cache manager.
-    
-    参数 Args:
-        redis_client: Redis 客户端实例 / Redis client instance
-        prefix: Redis 键前缀 / Redis key prefix
-        default_ttl: 默认过期时间（秒）/ Default TTL in seconds
-        key_prefix: 全局键前缀 / Global key prefix
-        serialize: 是否序列化值 / Whether to serialize values
-        
-    返回 Returns:
-        缓存管理器实例 / Cache manager instance
-    """
-    backend = RedisCache(
-        redis_client=redis_client,
-        prefix=prefix,
-        default_ttl=default_ttl,
-        serialize=serialize
-    )
-    return CacheManager(backend=backend, default_ttl=default_ttl, key_prefix=key_prefix)
+
 
 
 __all__ = [
     "CacheManager",
     "create_local_cache_manager",
-    "create_redis_cache_manager",
 ]

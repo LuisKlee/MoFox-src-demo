@@ -1,946 +1,498 @@
-# 数据库优化与架构设计指南（Database Optimization & Architecture Guide）
+# SQLite 性能优化指南
 
 ## 目录
 
-1. [系统架构](#系统架构)
-2. [连接池优化](#连接池优化)
+1. [WAL 模式优化](#wal-模式优化)
+2. [连接池管理](#连接池管理)
 3. [查询优化](#查询优化)
-4. [缓存策略](#缓存策略)
-5. [事务管理](#事务管理)
-6. [监控与诊断](#监控与诊断)
-7. [高可用设计](#高可用设计)
+4. [索引策略](#索引策略)
+5. [事务优化](#事务优化)
+6. [缓存策略](#缓存策略)
+7. [监控和诊断](#监控和诊断)
 
 ---
 
-## 系统架构
+## WAL 模式优化
 
-### 分层架构
+### 什么是 WAL？
 
-```
-┌────────────────────────────────────────────────────────┐
-│              应用业务层（Application）                 │
-│          • LLM 服务  • 用户服务  • 消息服务           │
-└─────────────────────┬────────────────────────────────┘
-                      │
-┌─────────────────────▼────────────────────────────────┐
-│            缓存层（Cache Layer）                      │
-│   ┌─────────────┐        ┌──────────────┐           │
-│   │ LocalCache  │◄────►  │ RedisCache   │           │
-│   │ (本地内存)  │        │ (分布式)     │           │
-│   └─────────────┘        └──────────────┘           │
-│                                                       │
-│  • @cached 装饰器                                    │
-│  • 自动序列化/反序列化                               │
-│  • TTL 和过期策略                                    │
-└─────────────────────┬────────────────────────────────┘
-                      │
-┌─────────────────────▼────────────────────────────────┐
-│           Repository 层（数据访问）                  │
-│   ┌──────────┐  ┌────────┐  ┌──────────┐           │
-│   │SQL-CRUD  │  │Redis   │  │MongoDB   │           │
-│   │Repository│  │Repo    │  │Repo      │           │
-│   └────┬─────┘  └───┬────┘  └────┬─────┘           │
-└───────┼─────────────┼─────────────┼────────────────┘
-        │             │             │
-┌───────▼─────────────▼─────────────▼────────────────┐
-│         API 层（QuerySpec、会话管理）              │
-│   ┌────────────────────────────────────────────┐  │
-│   │  QuerySpec (统一查询规约)                  │  │
-│   │  SessionManager (事务管理器)               │  │
-│   │  EngineConfig (配置管理)                   │  │
-│   └────────────────────────────────────────────┘  │
-└───────┬─────────────────────────────────────────┬──┘
-        │                                         │
-┌───────▼─────────────────────┐   ┌──────────────▼──┐
-│   SQLAlchemy ORM 层         │   │  驱动集成层    │
-│  (MySQL/PostgreSQL)         │   │ (Redis/Mongo) │
-└───────┬─────────────────────┘   └──────────────┬──┘
-        │                                         │
-┌───────▼─────────────────────────────────────────▼──┐
-│           数据库引擎层（Database Layer）          │
-│  ┌─────────┬────────┬───────────┬─────┬────────┐ │
-│  │SQLite   │ MySQL  │PostgreSQL │Redis│MongoDB │ │
-│  └─────────┴────────┴───────────┴─────┴────────┘ │
-└──────────────────────────────────────────────────┘
-```
+WAL（Write-Ahead Logging）是 SQLite 的日志记录方式，相比默认模式有更好的并发性能。
 
-### 多数据库选择矩阵
+### 启用 WAL
 
 ```python
-# 根据需求选择合适的数据库组合
+from kernel.db.core import create_sqlite_engine
 
-配置示例：
-{
-    "primary": {
-        "type": "mysql" | "postgresql",  # 主业务数据
-        "role": "master",
-        "replication": True
-    },
-    "cache": {
-        "type": "redis",                  # 缓存层
-        "role": "cache",
-        "ttl": 3600
-    },
-    "analytics": {
-        "type": "mongodb" | "postgresql",  # 分析数据
-        "role": "analytics",
-        "archive": True
-    },
-    "log": {
-        "type": "mongodb",                # 日志存储
-        "role": "log",
-        "retention": "30d"
-    }
-}
+# 自动启用所有 WAL 相关优化
+engine = create_sqlite_engine(
+    "data/app.db",
+    enable_wal=True  # 推荐所有生产环境启用
+)
 ```
+
+### WAL 性能对比
+
+| 指标 | 默认模式 | WAL 模式 | 提升 |
+|------|--------|--------|------|
+| 顺序写入 | 100 OPS | 500 OPS | 5 倍 |
+| 并发读 | 阻塞 | 可读 | ✓ |
+| 并发写 | 阻塞 | 阻塞 | 无 |
+| 读取延迟 | 低 | 低 | ≈ |
+| 磁盘空间 | 小 | 大 | +5% |
+
+### WAL 相关文件
+
+```
+data/
+├── app.db           # 主数据库文件
+├── app.db-wal       # WAL 日志（活跃时存在）
+└── app.db-shm       # 共享内存（WAL 使用）
+```
+
+**注意：** 不支持网络文件系统（NFS），仅支持本地文件系统。
 
 ---
 
-## 连接池优化
+## 连接池管理
 
-### 连接池参数调优
+### 池大小计算
 
 ```python
-from kernel.db.core import EngineManager, EngineConfig
+# 最优池大小 = (并发连接数 * 2) + 5
 
-def create_optimized_engine(db_type: str, concurrent_users: int):
-    """
-    根据并发用户数优化连接池参数
-    
-    Args:
-        db_type: 数据库类型 (mysql, postgresql)
-        concurrent_users: 并发用户数
-    
-    Returns:
-        优化后的数据库引擎
-    """
-    
-    # 连接池计算公式
-    # pool_size = concurrent_users / 2  (数据库通常时间片很短)
-    # max_overflow = pool_size / 2
-    # max_idle_time = 300-600 秒
-    
-    pool_size = max(5, concurrent_users // 2)
-    max_overflow = pool_size // 2
-    
-    return EngineManager().create(EngineConfig(
-        dialect=db_type,
-        database="mofox",
-        pool_size=pool_size,
-        max_overflow=max_overflow,
-        pool_timeout=30,          # 等待可用连接的超时时间
-        pool_recycle=3600,        # 连接回收周期
-        pool_pre_ping=True,       # 使用前检查连接活跃性
-        echo=False,               # 关闭 SQL 日志（提高性能）
-        engine_kwargs={
-            "pool_use_lifo": True  # 使用 LIFO（减少连接复用）
-        }
-    ))
+from kernel.db.core import create_sqlite_engine
 
-# 使用示例
-# 10 个并发用户
-small_app_engine = create_optimized_engine("mysql", 10)
+# 开发环境（并发 5）
+dev_engine = create_sqlite_engine(
+    "data/dev.db",
+    pool_size=15  # (5 * 2) + 5
+)
 
-# 100 个并发用户
-medium_app_engine = create_optimized_engine("postgresql", 100)
+# 生产环境（并发 20）
+prod_engine = create_sqlite_engine(
+    "data/prod.db",
+    pool_size=45  # (20 * 2) + 5
+)
 
-# 1000+ 并发用户
-large_app_engine = create_optimized_engine("postgresql", 1000)
+# 高并发（并发 50）
+high_concurrency_engine = create_sqlite_engine(
+    "data/high_load.db",
+    pool_size=105  # (50 * 2) + 5
+)
 ```
 
-### 连接池监控
+### 连接回收
 
 ```python
-from sqlalchemy import event, pool
+# 长期运行应用应定期回收连接
+config = EngineConfig(
+    database="data/app.db",
+    pool_size=20,
+    pool_timeout=30,
+    # 连接在 1 小时后回收，防止"僵尸"连接
+)
 
-def log_pool_events(dbapi_conn, connection_record):
-    """记录连接池事件用于诊断"""
-    print(f"新连接: {id(dbapi_conn)}")
+# 手动回收连接
+from sqlalchemy import event
+from sqlalchemy.pool import QueuePool
 
-def log_pool_checkout(dbapi_conn, connection_record, connection_proxy):
-    """记录连接取出"""
-    print(f"连接签出: {id(dbapi_conn)}")
-
-def log_pool_checkin(dbapi_conn, connection_record):
-    """记录连接归还"""
-    print(f"连接归还: {id(dbapi_conn)}")
-
-# 为引擎绑定事件
-engine = create_optimized_engine("mysql", 100)
-
-event.listen(engine.pool, "connect", log_pool_events)
-event.listen(engine.pool, "checkout", log_pool_checkout)
-event.listen(engine.pool, "checkin", log_pool_checkin)
-
-# 获取连接池状态
-pool_stats = {
-    "size": engine.pool.size(),
-    "checked_out": engine.pool.checkedout(),
-    "overflow": engine.pool.overflow(),
-    "total": engine.pool.size() + engine.pool.overflow()
-}
-
-print(f"连接池状态: {pool_stats}")
+@event.listens_for(QueuePool, "connect")
+def set_sqlite_pragma(dbapi_conn, connection_record):
+    cursor = dbapi_conn.cursor()
+    cursor.execute("PRAGMA journal_mode = WAL")
+    cursor.close()
 ```
 
 ---
 
 ## 查询优化
 
-### 1. 使用 QuerySpec 进行分页
+### 1. 投影优化（只查询需要的列）
 
 ```python
-from kernel.db.api import QuerySpec, SQLAlchemyCRUDRepository
-
-repo = SQLAlchemyCRUDRepository(session_mgr)
-
-# ❌ 错误：加载所有数据到内存
-with repo.session_scope() as session:
-    all_users = repo.list(session, User)  # 可能 100 万条！
-    for user in all_users:
-        process(user)
-
-# ✅ 正确：分页处理
-page_size = 1000
-offset = 0
-
-with repo.session_scope() as session:
-    while True:
-        users = repo.list(
-            session,
-            User,
-            QuerySpec(limit=page_size, offset=offset)
-        )
-        
-        if not users:
-            break
-        
-        for user in users:
-            process(user)
-        
-        offset += page_size
-```
-
-### 2. 索引优化
-
-```python
-from sqlalchemy import Index, Column, Integer, String
-from sqlalchemy.orm import declarative_base
-
-Base = declarative_base()
-
-class User(Base):
-    __tablename__ = 'users'
-    
-    id = Column(Integer, primary_key=True)
-    email = Column(String(255), unique=True)  # 唯一索引
-    username = Column(String(255))
-    created_at = Column(DateTime)
-    
-    # 复合索引：常用于查询过滤
-    __table_args__ = (
-        Index('idx_created_at_username', 'created_at', 'username'),
-        Index('idx_email_created_at', 'email', 'created_at'),
-    )
-
-# 创建表并索引
-Base.metadata.create_all(engine)
-
-# 查询时，使用索引的字段条件
 from kernel.db.api import QuerySpec
 
-# 使用索引，查询快
-spec = QuerySpec(
-    filters={
-        "created_at": (">", datetime.now() - timedelta(days=7)),
-        "username": "admin"
-    },
-    order_by="created_at DESC"
-)
+# ❌ 低效：查询所有列再筛选
+with repo.session_scope() as session:
+    users = repo.list(session, User)
+    names = [u.name for u in users]  # 浪费内存
 
-users = repo.list(session, User, spec)
+# ✅ 高效：只查询需要的列
+with repo.session_scope() as session:
+    from sqlalchemy import select
+    stmt = select(User.id, User.name)
+    result = session.execute(stmt).fetchall()
 ```
 
-### 3. MongoDB 查询优化
+### 2. 分页优化
 
 ```python
-from kernel.db.api import MongoDBRepository, QuerySpec
+# ❌ 低效：OFFSET 大时扫描所有行
+with repo.session_scope() as session:
+    spec = QuerySpec(
+        limit=20,
+        offset=10000  # 需要扫描 10020 行
+    )
+    users = repo.list(session, User, spec)
 
-repo = MongoDBRepository(collection)
-
-# ❌ 低效：聚合前没有 $match 过滤
-result = repo.aggregate([
-    {"$group": {"_id": "$status", "count": {"$sum": 1}}},
-    {"$match": {"count": {"$gt": 100}}}  # 在后面才过滤
-])
-
-# ✅ 高效：先过滤再聚合
-result = repo.aggregate([
-    {"$match": {"created_at": {"$gte": datetime.now() - timedelta(days=7)}}},
-    {"$group": {"_id": "$status", "count": {"$sum": 1}}},
-    {"$match": {"count": {"$gt": 100}}},
-    {"$sort": {"count": -1}},
-    {"$limit": 10}
-])
-
-# MongoDB 索引
-collection.create_index("email")
-collection.create_index([("created_at", -1)])
-collection.create_index([("tags", 1), ("created_at", -1)])
+# ✅ 高效：使用 WHERE 条件
+with repo.session_scope() as session:
+    last_id = 10000
+    spec = QuerySpec(
+        filters=[User.id > last_id],
+        limit=20
+    )
+    users = repo.list(session, User, spec)
 ```
 
-### 4. Redis 查询优化
+### 3. JOIN 优化
 
 ```python
-from kernel.db.api import RedisRepository
+from sqlalchemy import joinedload
 
-repo = RedisRepository(redis_client)
+# ❌ 低效：N+1 查询
+with repo.session_scope() as session:
+    users = repo.list(session, User)
+    for user in users:
+        posts = user.posts  # 每个用户一次查询
 
-# ❌ 低效：多个 get 请求
-user_ids = [1, 2, 3, 4, 5]
-for uid in user_ids:
-    user = repo.get(f"user:{uid}")  # 5 个网络往返
+# ✅ 高效：预加载关联
+from sqlalchemy import select
+stmt = select(User).options(joinedload(User.posts))
+users = session.execute(stmt).unique().scalars().all()
+```
 
-# ✅ 高效：管道批量获取
-with redis_client.pipeline() as pipe:
-    for uid in user_ids:
-        pipe.get(f"user:{uid}")
-    users = pipe.execute()  # 1 个网络往返
+### 4. 排序优化
 
-# 或直接使用 Repository 的批量方法
-keys = [f"user:{uid}" for uid in user_ids]
-users = repo.get_many(keys)
+```python
+# ❌ 低效：在应用中排序（缓存整个结果集）
+with repo.session_scope() as session:
+    users = repo.list(session, User)
+    sorted_users = sorted(users, key=lambda u: u.created_at)
+
+# ✅ 高效：在数据库中排序
+with repo.session_scope() as session:
+    spec = QuerySpec(
+        order_by=[User.created_at.desc()]
+    )
+    users = repo.list(session, User, spec)
+```
+
+---
+
+## 索引策略
+
+### 索引基础
+
+```python
+from sqlalchemy import Column, Integer, String, Index
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True)
+    
+    # 单列索引
+    email = Column(String(100), index=True)
+    name = Column(String(100), index=True)
+    
+    # 唯一索引
+    username = Column(String(50), unique=True)
+    
+    # 复合索引
+    __table_args__ = (
+        Index('idx_status_created', 'status', 'created_at'),
+    )
+```
+
+### 索引使用场景
+
+| 场景 | 推荐 |
+|------|------|
+| WHERE 条件 | ✓ |
+| JOIN 条件 | ✓ |
+| ORDER BY | ✓ |
+| GROUP BY | ✓ |
+| 高基数列（如 ID） | ✓ |
+| 低基数列（如性别） | ✗ |
+
+### 索引性能监控
+
+```python
+def analyze_indexes(engine):
+    """分析索引使用情况"""
+    with engine.connect() as conn:
+        # 获取所有索引
+        result = conn.execute("""
+            SELECT name, tbl_name 
+            FROM sqlite_master 
+            WHERE type='index'
+        """)
+        
+        for name, table in result:
+            print(f"索引：{name} （表：{table}）")
+        
+        # 强制分析
+        conn.execute("ANALYZE")
+        conn.commit()
+
+# 使用
+analyze_indexes(engine)
+```
+
+---
+
+## 事务优化
+
+### 批量操作
+
+```python
+# ❌ 低效：多个事务
+with repo.session_scope() as session:
+    for user_data in large_list:
+        repo.add(session, User(**user_data))
+        # 每个 add 都涉及事务开销
+
+# ✅ 高效：单个事务中批量插入
+with repo.session_scope() as session:
+    users = [User(**data) for data in large_list]
+    repo.add_many(session, users, flush=True)
+```
+
+### 事务隔离级别
+
+```python
+from sqlalchemy import event, create_engine
+
+engine = create_sqlite_engine("data/app.db")
+
+# SQLite 支持的隔离级别
+# DEFERRED（默认）：延迟锁定
+# IMMEDIATE：立即锁定（防止写冲突）
+# EXCLUSIVE：独占锁定（防止所有冲突）
+
+@event.listens_for(engine, "connect")
+def set_isolation(dbapi_conn, connection_record):
+    # 使用 IMMEDIATE 防止写冲突
+    dbapi_conn.isolation_level = None  # 禁用自动事务
+    cursor = dbapi_conn.cursor()
+    cursor.execute("BEGIN IMMEDIATE")
+    cursor.close()
 ```
 
 ---
 
 ## 缓存策略
 
-### 1. 多级缓存架构
+### 多层缓存架构
 
 ```python
-from kernel.db.optimization import (
-    create_local_cache_manager,
-    create_redis_cache_manager
-)
-
-# 第一层：本地内存缓存（热数据）
-local_cache_mgr = create_local_cache_manager(
-    max_size=500,       # 500 条记录
-    ttl=300             # 5 分钟
-)
-
-# 第二层：Redis 缓存（分布式）
-redis_cache_mgr = create_redis_cache_manager(
-    redis_client=redis_client,
-    key_prefix="mofox:",
-    ttl=3600            # 1 小时
-)
-
-# 使用多级缓存
-def get_user_optimized(user_id):
-    """获取用户，优先使用多级缓存"""
-    
-    # L1: 本地缓存
-    key = f"user:{user_id}"
-    user = local_cache_mgr.backend.get(key)
-    if user:
-        return user
-    
-    # L2: Redis 缓存
-    user = redis_cache_mgr.backend.get(key)
-    if user:
-        # 回写到本地缓存
-        local_cache_mgr.backend.set(key, user, ex=300)
-        return user
-    
-    # L3: 数据库
-    user = db.get_user(user_id)
-    
-    # 写入双层缓存
-    local_cache_mgr.backend.set(key, user, ex=300)
-    redis_cache_mgr.backend.set(key, user, ex=3600)
-    
-    return user
-```
-
-### 2. 缓存更新策略
-
-```python
-class CacheStrategy:
-    """缓存更新策略"""
-    
-    # 缓存穿透：大量查询不存在的键
-    @staticmethod
-    def cache_through(key: str, db_getter, cache_mgr, ttl=3600):
-        """
-        缓存穿透保护：缓存空值
-        """
-        cached = cache_mgr.backend.get(key)
-        if cached is not None:
-            return cached
-        
-        # 数据库查询
-        value = db_getter()
-        
-        if value is None:
-            # 缓存空值（短 TTL）防止穿透
-            cache_mgr.backend.set(key, "NULL", ex=60)
-            return None
-        
-        cache_mgr.backend.set(key, value, ex=ttl)
-        return value
-    
-    # 缓存击穿：热键过期导致数据库压力
-    @staticmethod
-    def cache_stampede_protection(key: str, db_getter, cache_mgr, ttl=3600):
-        """
-        缓存击穿保护：使用互斥锁
-        """
-        cached = cache_mgr.backend.get(key)
-        if cached:
-            return cached
-        
-        # 尝试获取锁（1 秒超时）
-        lock_key = f"{key}:lock"
-        lock_value = str(uuid.uuid4())
-        
-        if cache_mgr.backend.set_if_not_exists(lock_key, lock_value, ex=1):
-            try:
-                # 获得锁，进行数据库查询并更新缓存
-                value = db_getter()
-                cache_mgr.backend.set(key, value, ex=ttl)
-            finally:
-                # 释放锁
-                cache_mgr.backend.delete(lock_key)
-        else:
-            # 未获得锁，自旋等待缓存更新
-            for _ in range(10):
-                import time
-                time.sleep(0.1)
-                value = cache_mgr.backend.get(key)
-                if value:
-                    return value
-        
-        return cache_mgr.backend.get(key)
-    
-    # 缓存雪崩：大量键同时过期
-    @staticmethod
-    def cache_avalanche_protection(keys_getters: dict, cache_mgr):
-        """
-        缓存雪崩保护：随机 TTL
-        """
-        import random
-        
-        for key, db_getter in keys_getters.items():
-            # 随机 TTL（±10%）
-            base_ttl = 3600
-            random_ttl = int(base_ttl * (0.9 + random.random() * 0.2))
-            
-            value = db_getter()
-            cache_mgr.backend.set(key, value, ex=random_ttl)
-```
-
-### 3. 缓存预热
-
-```python
-def warm_cache(cache_mgr, db_repo):
-    """
-    缓存预热：启动时加载热数据
-    """
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    logger.info("开始缓存预热...")
-    
-    # 预热用户数据
-    from kernel.db.api import QuerySpec
-    
-    with db_repo.session_scope() as session:
-        # 获取最活跃的 1000 个用户
-        active_users = db_repo.list(
-            session,
-            User,
-            QuerySpec(
-                filters={"status": "active"},
-                order_by="last_login DESC",
-                limit=1000
-            )
-        )
-        
-        for user in active_users:
-            key = f"user:{user.id}"
-            cache_mgr.backend.set(
-                key,
-                pickle.dumps(user),
-                ex=86400  # 24 小时
-            )
-    
-    logger.info(f"缓存预热完成，共 {len(active_users)} 条记录")
-
-# 启动时调用
-if __name__ == "__main__":
-    from kernel.db.optimization import create_redis_cache_manager
-    
-    cache_mgr = create_redis_cache_manager(redis_client)
-    warm_cache(cache_mgr, repo)
-    
-    # 启动应用
-    app.run()
-```
-
----
-
-## 事务管理
-
-### 1. 基础事务
-
-```python
-from kernel.db.core import SessionManager
-
-session_mgr = SessionManager(engine)
-repo = SQLAlchemyCRUDRepository(session_mgr)
-
-# ✅ 推荐：使用上下文管理器
-with repo.session_scope() as session:
-    # 自动提交/回滚
-    user = repo.add(session, User(name="Alice"), flush=True)
-    # 提交时点
-```
-
-### 2. 嵌套事务与保存点
-
-```python
-with repo.session_scope() as session:
-    user = repo.add(session, User(name="Alice"))
-    
-    try:
-        with session.begin_nested() as sp:
-            # 嵌套事务
-            profile = repo.add(session, Profile(user_id=user.id))
-            # 某个操作失败
-            if error:
-                sp.rollback()  # 仅回滚此部分
-    except:
-        pass  # 继续处理
-
-# 手动事务管理（不推荐）
-session = session_mgr.create_session()
-try:
-    user = repo.add(session, User(name="Bob"))
-    session.commit()
-except Exception as e:
-    session.rollback()
-    logger.error(f"事务失败: {e}")
-finally:
-    session.close()
-```
-
-### 3. 分布式事务处理
-
-```python
-# 场景：在 MySQL 和 Redis 中原子性操作
-
-def update_user_with_cache(user_id, updates):
-    """
-    更新用户信息并更新缓存（两阶段提交模式）
-    """
-    cache_key = f"user:{user_id}"
-    
-    # Phase 1: Prepare
-    try:
-        with repo.session_scope() as session:
-            user = repo.get(session, User, user_id)
-            if not user:
-                raise ValueError("用户不存在")
-            
-            # 检查更新的有效性
-            for key, value in updates.items():
-                if not is_valid(key, value):
-                    raise ValueError(f"非法更新: {key}={value}")
-        
-        # Phase 2: Commit
-        with repo.session_scope() as session:
-            repo.update(session, user_id, updates)
-            
-            # 更新缓存
-            updated_user = repo.get(session, User, user_id)
-            cache_mgr.backend.set(
-                cache_key,
-                pickle.dumps(updated_user),
-                ex=3600
-            )
-        
-        return True
-    
-    except Exception as e:
-        # 回滚：删除缓存或保持原值
-        logger.error(f"事务失败: {e}")
-        return False
-```
-
----
-
-## 监控与诊断
-
-### 1. 查询性能监控
-
-```python
-from sqlalchemy import event
-from time import time
-import logging
-
-logger = logging.getLogger(__name__)
-
-class QueryMonitor:
-    """SQL 查询性能监控"""
-    
-    queries = []
-    
-    @classmethod
-    def before_cursor_execute(cls, conn, cursor, statement, parameters, context, executemany):
-        """查询执行前"""
-        conn.info.setdefault('query_start_time', []).append(time())
-    
-    @classmethod
-    def after_cursor_execute(cls, conn, cursor, statement, parameters, context, executemany):
-        """查询执行后"""
-        total_time = time() - conn.info['query_start_time'].pop(-1)
-        
-        if total_time > 0.1:  # 超过 100ms 的慢查询
-            logger.warning(
-                f"慢查询 ({total_time:.3f}s): {statement[:100]}..."
-            )
-        
-        cls.queries.append({
-            'statement': statement[:200],
-            'time': total_time,
-            'parameters': str(parameters)[:100]
-        })
-    
-    @classmethod
-    def register(cls, engine):
-        """为引擎注册监控"""
-        event.listen(engine, "before_cursor_execute", cls.before_cursor_execute)
-        event.listen(engine, "after_cursor_execute", cls.after_cursor_execute)
-    
-    @classmethod
-    def report(cls):
-        """生成性能报告"""
-        if not cls.queries:
-            return "无查询记录"
-        
-        total_time = sum(q['time'] for q in cls.queries)
-        avg_time = total_time / len(cls.queries)
-        max_time = max(q['time'] for q in cls.queries)
-        
-        return f"""
-        查询统计：
-        - 总查询数: {len(cls.queries)}
-        - 总耗时: {total_time:.3f}s
-        - 平均耗时: {avg_time:.3f}s
-        - 最长耗时: {max_time:.3f}s
-        """
-
-# 使用
-engine = create_optimized_engine("mysql", 100)
-QueryMonitor.register(engine)
-
-# 应用运行...
-
-# 输出报告
-print(QueryMonitor.report())
-```
-
-### 2. 连接池健康检查
-
-```python
-def check_connection_pool_health(engine):
-    """检查连接池健康状态"""
-    
-    pool = engine.pool
-    
-    stats = {
-        'pool_size': pool.size(),
-        'checked_out': pool.checkedout(),
-        'overflow': pool.overflow(),
-        'total_connections': pool.size() + pool.overflow(),
-        'utilization': (pool.checkedout() / (pool.size() + pool.overflow())) * 100
-        if pool.size() > 0 else 0
-    }
-    
-    # 健康检查
-    health_status = "OK"
-    if stats['utilization'] > 90:
-        health_status = "WARNING: 连接池使用率过高"
-    elif stats['overflow'] > stats['pool_size']:
-        health_status = "CRITICAL: 溢出连接过多"
-    
-    return stats, health_status
-
-# 定期检查
-import threading
-
-def monitor_pool_health(engine, interval=60):
-    """定期监控连接池"""
-    def check():
-        while True:
-            stats, status = check_connection_pool_health(engine)
-            logger.info(f"连接池: {stats} - {status}")
-            time.sleep(interval)
-    
-    thread = threading.Thread(target=check, daemon=True)
-    thread.start()
-
-# 使用
-monitor_pool_health(engine, interval=30)
-```
-
-### 3. Redis 性能监控
-
-```python
-def monitor_redis_health(redis_client):
-    """监控 Redis 服务健康"""
-    
-    # 基础健康检查
-    ping_result = redis_client.ping()
-    
-    # 获取服务器统计
-    info = redis_client.info()
-    
-    stats = {
-        'connected_clients': info.get('connected_clients', 0),
-        'used_memory': info.get('used_memory_human', '0B'),
-        'used_memory_peak': info.get('used_memory_peak_human', '0B'),
-        'total_keys': redis_client.dbsize(),
-        'evicted_keys': info.get('evicted_keys', 0),
-        'keyspace_hits': info.get('keyspace_hits', 0),
-        'keyspace_misses': info.get('keyspace_misses', 0),
-    }
-    
-    # 计算缓存命中率
-    total = stats['keyspace_hits'] + stats['keyspace_misses']
-    hit_rate = (stats['keyspace_hits'] / total * 100) if total > 0 else 0
-    
-    return {
-        'status': 'OK' if ping_result else 'FAILED',
-        'stats': stats,
-        'hit_rate': f"{hit_rate:.2f}%"
-    }
-
-# 使用
-redis_health = monitor_redis_health(redis_client)
-print(f"缓存命中率: {redis_health['hit_rate']}")
-```
-
----
-
-## 高可用设计
-
-### 1. 主从复制（MySQL/PostgreSQL）
-
-```python
-# Master 配置（写入）
-master_engine = EngineManager().create(EngineConfig(
-    dialect="mysql",
-    database="mofox",
-    username="app_user",
-    password="password",
-    host="master.db.example.com",
-    port=3306,
-    pool_size=20
-))
-
-# Slave 配置（读取）
-slave_engine = EngineManager().create(EngineConfig(
-    dialect="mysql",
-    database="mofox",
-    username="app_user",
-    password="password",
-    host="slave.db.example.com",
-    port=3306,
-    pool_size=30  # 读库连接数更多
-))
-
-class ReadWriteSeparation:
-    """读写分离"""
-    
-    def __init__(self, master_session_mgr, slave_session_mgr):
-        self.master_session_mgr = master_session_mgr
-        self.slave_session_mgr = slave_session_mgr
-    
-    def write(self, func):
-        """写操作使用 Master"""
-        with self.master_session_mgr.session_scope() as session:
-            return func(session)
-    
-    def read(self, func):
-        """读操作使用 Slave"""
-        with self.slave_session_mgr.session_scope() as session:
-            return func(session)
-
-# 使用
-rw = ReadWriteSeparation(master_session_mgr, slave_session_mgr)
-
-# 写入
-def add_user(user_data):
-    def _add(session):
-        return repo.add(session, User(**user_data), flush=True)
-    return rw.write(_add)
-
-# 读取
-def get_user(user_id):
-    def _get(session):
-        return repo.get(session, User, user_id)
-    return rw.read(_get)
-```
-
-### 2. MongoDB 副本集
-
-```python
-# 副本集连接
-mongo_client = create_mongodb_engine(
-    uri="mongodb://node1:27017,node2:27017,node3:27017",
-    replicaSet="rs0",
-    database="mofox",
-    serverSelectionTimeoutMS=5000,
-    connectTimeoutMS=10000,
-    retryWrites=True
-)
-
-# 定义读偏好
-from pymongo import ReadPreference
-
-# 读取从副本（降低主节点压力）
-db = mongo_client["mofox"]
-db.read_preference = ReadPreference.SECONDARY_PREFERRED
-
-# 写入总是到主节点
-collection = db["users"]
-result = collection.insert_one({"name": "Alice"})  # 写到主节点
-```
-
-### 3. Redis 高可用
-
-```python
-# Sentinel 配置（自动故障转移）
-from redis.sentinel import Sentinel
-
-sentinels = [
-    ("sentinel1.example.com", 26379),
-    ("sentinel2.example.com", 26379),
-    ("sentinel3.example.com", 26379),
-]
-
-sentinel = Sentinel(sentinels, socket_timeout=0.1)
-
-# 主节点
-master = sentinel.master_for("mymaster", socket_timeout=0.1)
-
-# 从节点（读取）
-slave = sentinel.slave_for("mymaster", socket_timeout=0.1)
-
-# 写入到主
-master.set("key", "value")
-
-# 读取从从（可能延迟）
-try:
-    value = slave.get("key")
-except:
-    # 故障转移，使用主节点
-    value = master.get("key")
-```
-
-### 4. 健康检查与自动故障转移
-
-```python
-import threading
+from functools import lru_cache
 import time
 
-class HealthChecker:
-    """定期健康检查"""
+class MultiLayerCache:
+    """L1 快速内存 + L2 持久化"""
     
-    def __init__(self, engine, interval=30):
-        self.engine = engine
-        self.interval = interval
-        self.is_healthy = True
+    def __init__(self):
+        self.l1 = {}  # 快速访问，限制大小
+        self.l2 = {}  # 备份存储
+        self.ttl = {}
+        self.l1_size = 100
     
-    def check(self):
-        """检查数据库连接健康状态"""
-        try:
-            with self.engine.connect() as conn:
-                conn.execute("SELECT 1")
-            self.is_healthy = True
-            logger.info("✓ 数据库连接正常")
-        except Exception as e:
-            self.is_healthy = False
-            logger.error(f"✗ 数据库连接失败: {e}")
-    
-    def start_monitoring(self):
-        """启动后台监控"""
-        def monitor():
-            while True:
-                self.check()
-                time.sleep(self.interval)
+    def get(self, key):
+        # L1 缓存
+        if key in self.l1:
+            if self._is_valid(key):
+                return self.l1[key]
         
-        thread = threading.Thread(target=monitor, daemon=True)
-        thread.start()
-
-# 使用
-checker = HealthChecker(engine, interval=30)
-checker.start_monitoring()
-
-# 应用中检查状态
-def safe_query():
-    if not checker.is_healthy:
-        # 切换到备用数据库或使用缓存
-        return get_from_cache_or_backup()
+        # L2 缓存
+        if key in self.l2:
+            if self._is_valid(key):
+                # 晋升到 L1
+                self._promote_to_l1(key)
+                return self.l2[key]
+        
+        return None
     
-    return query_database()
+    def set(self, key, value, ttl=3600):
+        if len(self.l1) < self.l1_size:
+            self.l1[key] = value
+        else:
+            self.l2[key] = value
+        
+        self.ttl[key] = time.time() + ttl
+    
+    def _is_valid(self, key):
+        return time.time() < self.ttl.get(key, 0)
+    
+    def _promote_to_l1(self, key):
+        if len(self.l1) >= self.l1_size:
+            # 淘汰最旧的
+            oldest = min(self.l1.keys(), key=lambda k: self.ttl.get(k, 0))
+            self.l2[oldest] = self.l1[oldest]
+            del self.l1[oldest]
+        
+        self.l1[key] = self.l2[key]
+        del self.l2[key]
 ```
 
----
-
-## 性能基准测试
+### 热点数据预加载
 
 ```python
-import timeit
-
-def benchmark_operations():
-    """基准测试不同操作的性能"""
+def warm_up_cache(session, repo, cache):
+    """启动时预加载热点数据"""
+    # 加载活跃用户
+    from kernel.db.api import QuerySpec
     
-    # 单条插入
-    insert_time = timeit.timeit(
-        lambda: repo.add(session, User(name="test")),
-        number=1000
+    spec = QuerySpec(
+        filters=[User.status == "active"],
+        limit=1000
     )
-    print(f"单条插入: {insert_time/1000:.3f}ms")
     
-    # 批量插入
-    batch_insert_time = timeit.timeit(
-        lambda: [repo.add(session, User(name=f"user{i}")) for i in range(100)],
-        number=10
-    )
-    print(f"批量插入(100条): {batch_insert_time/10:.1f}ms")
+    users = repo.list(session, User, spec)
+    for user in users:
+        cache.set(f"user:{user.id}", user, ttl=3600)
     
-    # 查询
-    query_time = timeit.timeit(
-        lambda: repo.list(session, User, QuerySpec(limit=100)),
-        number=100
-    )
-    print(f"查询(100条): {query_time/100:.3f}ms")
-    
-    # 缓存读取
-    cache_time = timeit.timeit(
-        lambda: cache_mgr.backend.get("key"),
-        number=10000
-    )
-    print(f"缓存读取: {cache_time/10000:.3f}ms")
-
-benchmark_operations()
+    print(f"预加载了 {len(users)} 条热点数据")
 ```
 
 ---
 
-**最后更新** | 2026 年 1月 6日
+## 监控和诊断
 
+### 性能指标
+
+```python
+import sqlite3
+import time
+
+def get_performance_metrics(db_path):
+    """获取数据库性能指标"""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+    
+    # 1. 数据库大小
+    import os
+    db_size = os.path.getsize(db_path)
+    
+    # 2. 表数量
+    cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='table'")
+    table_count = cursor.fetchone()[0]
+    
+    # 3. 索引数量
+    cursor.execute("SELECT COUNT(*) FROM sqlite_master WHERE type='index'")
+    index_count = cursor.fetchone()[0]
+    
+    # 4. WAL 模式
+    cursor.execute("PRAGMA journal_mode")
+    journal_mode = cursor.fetchone()[0]
+    
+    # 5. 缓存大小
+    cursor.execute("PRAGMA cache_size")
+    cache_size = cursor.fetchone()[0]
+    
+    conn.close()
+    
+    return {
+        "database_size": db_size,
+        "table_count": table_count,
+        "index_count": index_count,
+        "journal_mode": journal_mode,
+        "cache_size": cache_size,
+    }
+
+# 使用
+metrics = get_performance_metrics("data/app.db")
+print(f"数据库大小：{metrics['database_size'] / 1024 / 1024:.2f} MB")
+print(f"表数量：{metrics['table_count']}")
+print(f"日志模式：{metrics['journal_mode']}")
+```
+
+### 查询性能分析
+
+```python
+def analyze_query_performance(session, stmt, iterations=10):
+    """分析查询性能"""
+    import time
+    
+    times = []
+    for _ in range(iterations):
+        start = time.time()
+        session.execute(stmt).fetchall()
+        times.append(time.time() - start)
+    
+    avg_time = sum(times) / len(times)
+    min_time = min(times)
+    max_time = max(times)
+    
+    print(f"平均: {avg_time*1000:.2f}ms")
+    print(f"最小: {min_time*1000:.2f}ms")
+    print(f"最大: {max_time*1000:.2f}ms")
+    
+    return {
+        "average": avg_time,
+        "min": min_time,
+        "max": max_time,
+    }
+
+# 使用
+from sqlalchemy import select
+stmt = select(User).where(User.status == "active")
+analyze_query_performance(session, stmt)
+```
+
+---
+
+## 优化检查清单
+
+### 基础优化
+
+- [ ] 启用 WAL 模式
+- [ ] 设置合理的连接池大小
+- [ ] 启用外键约束
+- [ ] 配置适当的 synchronous 级别
+
+### 索引优化
+
+- [ ] 为 WHERE 条件列添加索引
+- [ ] 为 ORDER BY 列添加索引
+- [ ] 考虑复合索引
+- [ ] 移除未使用的索引
+
+### 查询优化
+
+- [ ] 使用投影避免查询不需要的列
+- [ ] 使用分页限制结果集
+- [ ] 使用 JOIN 而不是应用代码循环
+- [ ] 分析慢查询
+
+### 缓存优化
+
+- [ ] 缓存频繁查询的数据
+- [ ] 设置合理的 TTL
+- [ ] 实现缓存预热
+- [ ] 监控缓存命中率
+
+### 监控优化
+
+- [ ] 定期检查数据库大小
+- [ ] 分析慢查询日志
+- [ ] 监控连接池使用情况
+- [ ] 跟踪性能指标
+
+---
+
+## 最佳实践总结
+
+| 实践 | 影响 | 难度 |
+|------|------|------|
+| 启用 WAL | ⭐⭐⭐⭐⭐ | ⭐ |
+| 合理设置池大小 | ⭐⭐⭐⭐ | ⭐ |
+| 添加索引 | ⭐⭐⭐⭐ | ⭐⭐ |
+| 批量操作 | ⭐⭐⭐ | ⭐ |
+| 查询优化 | ⭐⭐⭐ | ⭐⭐ |
+| 缓存策略 | ⭐⭐⭐⭐ | ⭐⭐⭐ |
+
+---
+
+**最后更新** | 2026 年 1 月 8 日

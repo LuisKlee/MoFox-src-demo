@@ -1,242 +1,304 @@
-# 数据库内核说明
+# 数据库内核源代码说明
 
 ## 特性
 
-- 🗄️ **多数据库支持**：SQLite、MySQL、PostgreSQL、Redis、MongoDB
+- 🗄️ **专业级 SQLite 支持**：优化的 SQLite 配置，支持文件和内存模式
 - 🔄 **事务管理**：自动提交/回滚，异常安全
-- 📦 **CRUD 封装**：简洁的增删改查接口
-- 🔍 **查询规约**：统一的过滤、排序、分页
-- 🎯 **仓库模式**：针对不同数据库的专用仓库
+- 📦 **CRUD 封装**：简洁而强大的增删改查接口
+- 🔍 **查询规约**：统一的过滤、排序、分页机制
+- 🎯 **仓库模式**：基于 SQLAlchemy 的标准化数据库操作
 - 📝 **日志集成**：与 Logger 模块深度集成，自动记录所有数据库操作
-- ⚡ **性能监控**：记录查询时长、事务状态、操作统计
+- ⚡ **性能优化**：WAL 日志模式、连接池、内存映射 I/O、自动真空
 
 ## 目录结构
-- core/：数据库引擎与会话管理
-  - dialect_adapter.py：方言适配器接口与 SQLite、MySQL、PostgreSQL、Redis、MongoDB 实现
-  - engine.py：引擎注册与创建
-  - session.py：会话管理器（事务作用域）
-  - exceptions.py：数据库相关异常
-- api/：对外 CRUD / 查询接口
-  - crud.py：CRUD 抽象与 SQLAlchemy 实现
-  - query.py：查询规约（QuerySpec）与应用器
 
-## 当前能力
-- 支持 SQLite 引擎创建（文件或内存模式），自动创建目录。
-- 支持 MySQL 引擎创建（使用 pymysql 驱动）。
-- 支持 PostgreSQL 引擎创建（使用 psycopg2 驱动）。
-- 支持 Redis 连接（使用 redis-py）。
-- 支持 MongoDB 连接（使用 pymongo）。
-- 通过 EngineManager 按名称管理多个引擎，可扩展其他方言适配器。
-- SessionManager 提供事务作用域，自动提交/回滚与关闭。
-- SQLAlchemyCRUDRepository 封装常用增删改查，接受 QuerySpec 以复用过滤/排序/分页。
+```
+db/
+├── core/                    # 数据库引擎核心
+│   ├── dialect_adapter.py  # SQLite 适配器与配置
+│   ├── engine.py           # 引擎管理与创建
+│   ├── session.py          # 事务会话管理
+│   ├── exceptions.py       # 数据库异常定义
+│   └── __init__.py
+├── api/                     # 对外 CRUD/查询接口
+│   ├── crud.py             # CRUD 仓库实现
+│   ├── query.py            # 查询规约
+│   └── __init__.py
+└── README.md
+```
+
+## 核心能力
+
+- **SQLite 引擎**：文件和内存数据库支持，自动目录创建
+- **性能配置**：WAL 模式、智能缓存、内存映射 I/O、增量真空
+- **事务作用域**：自动提交/回滚、异常安全
+- **CRUD 操作**：增、删、改、查、批量操作、计数、存在性检查
+- **查询功能**：过滤、排序、分页、统一接口
 
 ## 快速使用示例
 
-### SQLite 示例（同步 SQLAlchemy）
+### 基础 SQLite 设置
+
 ```python
-from kernel.db.core import EngineManager, EngineConfig, SessionManager
+from kernel.db.core import create_sqlite_engine, SessionManager, EngineConfig
 from kernel.db.api import SQLAlchemyCRUDRepository, QuerySpec
 
-engine = EngineManager().create(EngineConfig(dialect="sqlite", database="data/app.db"))
+# 方式 1：使用便捷函数（推荐）
+engine = create_sqlite_engine("data/app.db")
+
+# 方式 2：使用 EngineManager 和 EngineConfig
+from kernel.db.core import EngineManager, EngineConfig
+
+config = EngineConfig(
+    database="data/app.db",
+    enable_wal=True,
+    enable_foreign_keys=True,
+    pool_size=10
+)
+manager = EngineManager()
+engine = manager.create(config)
+
+# 创建会话管理和仓库
 session_mgr = SessionManager(engine)
 repo = SQLAlchemyCRUDRepository(session_mgr)
 
+# 使用事务作用域进行 CRUD 操作
 with repo.session_scope() as session:
+    # 添加对象
     obj = repo.add(session, MyModel(name="demo"), flush=True)
-    rows = repo.list(session, MyModel, QuerySpec(limit=10))
-```
-
-### MySQL 示例
-```python
-from kernel.db.core import create_mysql_engine, SessionManager
-from kernel.db.api import SQLAlchemyCRUDRepository
-
-# 方式1：使用便捷函数
-engine = create_mysql_engine(
-    database="myapp",
-    username="root",
-    password="password123",
-    host="localhost",
-    port=3306,
-)
-
-# 方式2：使用 EngineConfig
-from kernel.db.core import EngineManager, EngineConfig
-
-engine = EngineManager().create(EngineConfig(
-    dialect="mysql",
-    database="myapp",
-    username="root",
-    password="password123",
-    host="localhost",
-    port=3306,
-    pool_size=10,
-))
-
-session_mgr = SessionManager(engine)
-repo = SQLAlchemyCRUDRepository(session_mgr)
-
-with repo.session_scope() as session:
-    user = repo.add(session, User(name="Alice"), flush=True)
-    users = repo.list(session, User, QuerySpec(limit=20))
-```
-
-### PostgreSQL 示例
-```python
-from kernel.db.core import create_postgres_engine, SessionManager
-from kernel.db.api import SQLAlchemyCRUDRepository
-
-# 方式1：使用便捷函数
-engine = create_postgres_engine(
-    database="mofox",
-    username="postgres",
-    password="password123",
-    host="localhost",
-    port=5432,
-)
-
-# 方式2：使用 EngineConfig
-from kernel.db.core import EngineManager, EngineConfig
-
-engine = EngineManager().create(EngineConfig(
-    dialect="postgresql",
-    database="mofox",
-    username="postgres",
-    password="password123",
-    pool_size=20,
-))
-
-session_mgr = SessionManager(engine)
-repo = SQLAlchemyCRUDRepository(session_mgr)
-
-with repo.session_scope() as session:
-    user = repo.add(session, User(name="Bob"), flush=True)
-```
-
-### Redis 示例
-```python
-from kernel.db.core import create_redis_engine
-from kernel.db.api import RedisRepository
-
-# Redis 返回的是 redis.Redis 客户端，而不是 SQLAlchemy 引擎
-redis_client = create_redis_engine(
-    database="0",  # Redis 数据库索引 (0-15)
-    host="localhost",
-    port=6379,
-    password="redis_password",  # 可选
-)
-
-# 使用 RedisRepository 封装常用操作
-repo = RedisRepository(redis_client)
-
-# String 操作
-repo.set("user:1001:name", "Alice", ex=3600)  # 1小时后过期
-name = repo.get("user:1001:name")
-
-# Hash 操作 - 存储用户信息
-repo.hset("user:1001", mapping={"name": "Alice", "age": "25", "city": "Beijing"})
-user_data = repo.hgetall("user:1001")
-
-# List 操作 - 消息队列
-repo.lpush("task_queue", "task1", "task2", "task3")
-task = repo.rpop("task_queue")
-
-# Set 操作 - 标签
-repo.sadd("user:1001:tags", "python", "ai", "backend")
-tags = repo.smembers("user:1001:tags")
-
-# Sorted Set 操作 - 排行榜
-repo.zadd("leaderboard", {"user1": 100, "user2": 200, "user3": 150})
-top_users = repo.zrange("leaderboard", 0, 9, withscores=True)
-
-# 缓存 LLM 响应
-repo.set("llm:response:123", "cached response", ex=3600)
-
-# 直接访问底层客户端进行高级操作
-repo.client.pipeline()  # 管道操作
-```
-
-### MongoDB 示例
-```python
-from kernel.db.core import create_mongodb_engine
-from kernel.db.api import MongoDBRepository, QuerySpec
-
-# MongoDB 返回的是 MongoDBEngine 封装器
-mongo_engine = create_mongodb_engine(
-    database="mofox_knowledge",
-    username="admin",
-    password="password123",
-    host="localhost",
-    port=27017,
-)
-
-# 使用 MongoDBRepository 封装常用操作
-repo = MongoDBRepository(mongo_engine)
-
-# 插入文档
-result = repo.insert_one("conversations", {
-    "user_id": "user123",
-    "message": "Hello, AI!",
-    "timestamp": "2026-01-06T10:00:00Z",
-    "metadata": {"model": "gpt-4", "tokens": 150}
-})
-
-# 批量插入
-repo.insert_many("conversations", [
-    {"user_id": "user123", "message": "Question 1"},
-    {"user_id": "user123", "message": "Question 2"},
-])
-
-# 查询单个文档
-doc = repo.find_one("conversations", {"user_id": "user123"})
-
-# 使用 QuerySpec 查询多个文档
-results = repo.find(
-    "conversations",
-    {"user_id": "user123"},
-    QuerySpec(
-        order_by=[("timestamp", -1)],  # 按时间倒序
+    
+    # 列表查询
+    query_spec = QuerySpec(
+        filters=[MyModel.status == "active"],
+        order_by=[MyModel.created_at.desc()],
         limit=10,
         offset=0
     )
+    rows = repo.list(session, MyModel, query_spec)
+    
+    # 计数
+    count = repo.count(session, MyModel, query_spec)
+    
+    # 按 ID 获取
+    item = repo.get(session, MyModel, 1)
+    
+    # 更新字段
+    repo.update_fields(session, obj, {"status": "inactive"})
+    
+    # 删除
+    repo.delete(session, obj)
+    
+    # 事务自动提交
+```
+
+### 内存数据库（测试）
+
+```python
+from kernel.db.core import create_sqlite_engine
+from kernel.db.core import SessionManager
+from kernel.db.api import SQLAlchemyCRUDRepository
+
+# 创建内存数据库
+engine = create_sqlite_engine(":memory:")
+session_mgr = SessionManager(engine)
+repo = SQLAlchemyCRUDRepository(session_mgr)
+
+# 使用方式相同...
+with repo.session_scope() as session:
+    obj = repo.add(session, MyModel(name="test"))
+```
+
+### 高级配置
+
+```python
+from kernel.db.core import create_sqlite_engine
+
+engine = create_sqlite_engine(
+    database="data/prod.db",
+    pool_size=20,              # 连接池大小
+    pool_timeout=60,           # 超时时间（秒）
+    enable_wal=True,           # 启用 WAL 日志模式
+    enable_foreign_keys=True,  # 启用外键约束
+    journal_mode="WAL",        # 日志模式
+    synchronous="NORMAL",      # 同步模式（NORMAL/FULL/OFF）
+    timeout=20,                # SQLite 锁超时（秒）
+    echo=False                 # SQL 日志输出
+)
+```
+
+## EngineConfig 参数说明
+
+| 参数 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `database` | str | 必需 | 数据库文件路径或 `:memory:` |
+| `echo` | bool | False | 启用 SQL 语句日志 |
+| `pool_size` | int | 10 | 连接池大小 |
+| `pool_timeout` | int | 30 | 连接获取超时（秒） |
+| `enable_wal` | bool | True | 启用 WAL 日志模式 |
+| `enable_foreign_keys` | bool | True | 启用外键约束 |
+| `journal_mode` | str | WAL | 日志模式（WAL/DELETE/TRUNCATE） |
+| `synchronous` | str | NORMAL | 同步级别（OFF/NORMAL/FULL） |
+| `timeout` | int | 20 | 数据库锁超时（秒） |
+| `connect_args` | dict | {} | 额外的连接参数 |
+
+## SQLAlchemy ORM 定义示例
+
+```python
+from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy.orm import declarative_base
+from datetime import datetime
+
+Base = declarative_base()
+
+class User(Base):
+    __tablename__ = "users"
+    
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), nullable=False)
+    email = Column(String(100), unique=True)
+    status = Column(String(20), default="active")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_deleted = Column(Boolean, default=False)
+```
+
+## CRUD 操作详解
+
+### 添加单个对象
+
+```python
+with repo.session_scope() as session:
+    user = User(name="Alice", email="alice@example.com")
+    repo.add(session, user, flush=True)
+    # 事务提交时完整保存
+```
+
+### 批量添加对象
+
+```python
+with repo.session_scope() as session:
+    users = [
+        User(name="Bob", email="bob@example.com"),
+        User(name="Charlie", email="charlie@example.com"),
+    ]
+    repo.add_many(session, users, flush=True)
+```
+
+### 查询操作
+
+```python
+from kernel.db.api import QuerySpec
+
+with repo.session_scope() as session:
+    # 基础查询
+    all_users = repo.list(session, User)
+    
+    # 带过滤的查询
+    active_users = repo.list(
+        session, 
+        User, 
+        QuerySpec(filters=[User.status == "active"])
+    )
+    
+    # 复杂查询
+    spec = QuerySpec(
+        filters=[
+            User.status == "active",
+            User.is_deleted == False
+        ],
+        order_by=[User.created_at.desc()],
+        limit=20,
+        offset=0
+    )
+    results = repo.list(session, User, spec)
+```
+
+### 更新操作
+
+```python
+with repo.session_scope() as session:
+    user = repo.get(session, User, 1)
+    repo.update_fields(session, user, {
+        "name": "Alice Updated",
+        "status": "inactive"
+    })
+```
+
+### 删除操作
+
+```python
+with repo.session_scope() as session:
+    # 删除单个对象
+    user = repo.get(session, User, 1)
+    repo.delete(session, user)
+    
+    # 删除符合条件的多个对象
+    spec = QuerySpec(filters=[User.is_deleted == True])
+    repo.delete_many(session, User, spec)
+```
+
+### 计数和存在性检查
+
+```python
+with repo.session_scope() as session:
+    # 统计所有用户
+    total = repo.count(session, User)
+    
+    # 统计活跃用户
+    active_count = repo.count(
+        session, 
+        User, 
+        QuerySpec(filters=[User.status == "active"])
+    )
+    
+    # 检查是否存在
+    exists = repo.exists(
+        session, 
+        User, 
+        QuerySpec(filters=[User.email == "alice@example.com"])
+    )
+```
+
+## 错误处理
+
+```python
+from kernel.db.core import (
+    EngineAlreadyExistsError,
+    EngineNotInitializedError,
+    SessionError
 )
 
-# 更新文档
-repo.update_one(
-    "conversations",
-    {"user_id": "user123"},
-    {"$set": {"status": "archived"}}
+try:
+    with repo.session_scope() as session:
+        obj = repo.add(session, MyModel())
+except SessionError as e:
+    logger.error(f"会话错误: {e}")
+except Exception as e:
+    # 事务会自动回滚
+    logger.error(f"操作失败: {e}")
+```
+
+## 性能优化配置
+
+### WAL 模式优势
+- **并发性**：允许读操作同时进行的写操作
+- **性能**：减少磁盘 I/O，提高写入吞吐量
+- **可靠性**：改进数据安全性
+
+### 推荐配置（生产环境）
+
+```python
+engine = create_sqlite_engine(
+    database="data/prod.db",
+    pool_size=20,
+    pool_timeout=60,
+    enable_wal=True,
+    enable_foreign_keys=True,
+    journal_mode="WAL",
+    synchronous="NORMAL",      # FULL 更安全但较慢
+    timeout=30,
+    echo=False
 )
-
-# 批量更新
-repo.update_many(
-    "conversations",
-    {"user_id": "user123"},
-    {"$set": {"reviewed": True}}
-)
-
-# 删除文档
-repo.delete_one("conversations", {"_id": result.inserted_id})
-
-# 统计文档数量
-count = repo.count_documents("conversations", {"user_id": "user123"})
-
-# 聚合查询
-pipeline = [
-    {"$match": {"user_id": "user123"}},
-    {"$group": {"_id": "$status", "count": {"$sum": 1}}}
-]
-stats = repo.aggregate("conversations", pipeline)
-
-# 创建索引
-repo.create_index("conversations", [("user_id", 1), ("timestamp", -1)])
-
-# 直接访问集合进行高级操作
-collection = repo.collection("conversations")
-collection.create_index([("message", "text")])  # 全文索引
-
-# 关闭连接
-mongo_engine.dispose()
 ```
 
 ## 日志集成
@@ -256,17 +318,6 @@ mongo_engine.dispose()
 - ✅ 查询记录：记录模型名称、查询条件、结果数量
 - ✅ 更新记录：记录更新的字段、字段数量
 - ✅ 删除记录：记录删除的模型
-
-**Redis 操作**
-- ✅ SET/GET：记录键名、是否找到、过期时间
-- ✅ DELETE：记录删除的键列表、删除数量
-- ✅ Hash/List/Set 操作：记录操作类型、键名
-
-**MongoDB 操作**
-- ✅ 插入文档：记录集合名、文档数量、插入ID
-- ✅ 查询文档：记录集合名、过滤条件、结果数量
-- ✅ 更新文档：记录匹配数、修改数、是否 upsert
-- ✅ 删除文档：记录删除数量
 
 ### 日志元数据
 
@@ -332,105 +383,9 @@ with repo.session_scope() as session:
     user = repo.add(session, User(name="Bob"), flush=True)
 ```
 
-### 查询数据库日志
-
-```python
-from datetime import datetime, timedelta
-
-# 查询最近1小时的数据库操作
-recent_logs = logger_system.log_store.get_logs(
-    start_date=datetime.now() - timedelta(hours=1),
-    filter_func=lambda log: log.get('operation') in ['add', 'update', 'delete']
-)
-
-# 按操作类型分组统计
-from collections import Counter
-
-operation_stats = Counter(
-    log.get('operation') for log in recent_logs
-)
-print(f"添加: {operation_stats['add']}次")
-print(f"更新: {operation_stats['update']}次")
-print(f"删除: {operation_stats['delete']}次")
-```
-
-### 错误追踪
-
-```python
-# 查询数据库错误
-error_logs = logger_system.get_error_logs(days=1)
-
-db_errors = [
-    log for log in error_logs
-    if 'session_id' in log or log.get('operation')
-]
-
-for error in db_errors:
-    print(f"时间: {error['timestamp']}")
-    print(f"操作: {error.get('operation', 'unknown')}")
-    print(f"错误: {error.get('error_message', '')}")
-    print("---")
-```
-
-### 性能分析
-
-```python
-# 分析事务执行时长
-transactions = logger_system.log_store.get_logs(
-    filter_func=lambda log: log.get('status') == 'committed'
-)
-
-durations = [log['duration'] for log in transactions if 'duration' in log]
-
-if durations:
-    avg_duration = sum(durations) / len(durations)
-    max_duration = max(durations)
-    
-    print(f"平均事务时长: {avg_duration:.3f}秒")
-    print(f"最长事务时长: {max_duration:.3f}秒")
-    print(f"总事务数: {len(durations)}")
-```
-
-### 审计日志
-
-```python
-from kernel.logger import MetadataContext
-
-# 记录用户操作的数据库变更
-with MetadataContext(user_id="user123", action="update_profile"):
-    with repo.session_scope() as session:
-        user = repo.get(session, User, user_id)
-        repo.update_fields(session, user, {"email": "new@example.com"})
-
-# 查询特定用户的数据库操作
-user_operations = logger_system.log_store.get_logs(
-    filter_func=lambda log: log.get('user_id') == 'user123'
-)
-```
-
-## 扩展指引
-- 新增数据库方言：实现 DialectAdapter，在 EngineManager.register_adapter 注册。
-- 自定义 CRUD：继承 CRUDRepository，替换 SQLAlchemy 实现，或封装异步版本。
-- 查询扩展：在 QuerySpec 中增加字段，并在 apply_query_spec 内映射到后端查询表达式。
-
-## 数据库选择指南
-- **SQLite**：本地开发、小型项目、嵌入式应用
-- **MySQL**：Web 应用、中等规模、需要主从复制
-- **PostgreSQL**：复杂查询、数据完整性、高级特性 (JSON/GIS)
-- **Redis**：缓存、会话存储、消息队列、实时数据
-- **MongoDB**：文档存储、日志、非结构化数据、快速原型
-
-## TODO
-- 提供异步会话/CRUD 版本（asyncpg、aiomysql、motor、aioredis）
-- 集成迁移与健康检查工具
-- 添加连接池监控与性能指标
-- 支持数据库读写分离配置
-
 ## 相关文档
 
-- 📖 [Logger 模块文档](../logger/README.md)
-- 📖 [Logger-Storage 集成指南](../../docs/kernel/logger/LOGGER_STORAGE_INTEGRATION.md)
-- 🚀 [Logger 快速参考](../../docs/kernel/logger/QUICK_REFERENCE.md)
-- 📖 [Storage 模块文档](../storage/README.md)
-- 📖 [数据库优化指南](../../docs/kernel/db/OPTIMIZATION_GUIDE.md)
-- 📖 [数据库缓存指南](../../docs/kernel/db/CACHE_GUIDE.md)
+- [性能优化指南](../../docs/kernel/db/OPTIMIZATION_GUIDE.md)
+- [快速参考](../../docs/kernel/db/QUICK_REFERENCE.md)
+- [API 参考](../../docs/kernel/db/API_REFERENCE.md)
+- [数据库配置指南](../../docs/kernel/db/DATABASE_GUIDE.md)

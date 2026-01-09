@@ -208,14 +208,19 @@ class AsyncHandler(logging.Handler):
 
 
 class LogStoreHandler(logging.Handler):
-    """日志存储处理器 - 将日志直接写入到 Storage 的 LogStore"""
+    """
+    日志存储处理器 - 将日志直接写入到 Storage 的 LogStore
+    
+    支持 Python 和 C++ 两个版本的 Storage 后端
+    """
     
     def __init__(
         self,
-        log_store,  # kernel.storage.LogStore 实例
+        log_store,  # kernel.storage.LogStore 实例（Python 或 C++ 版本）
         level: int = logging.DEBUG,
         include_metadata: bool = True,
-        include_exc_info: bool = True
+        include_exc_info: bool = True,
+        use_cpp: bool = None  # None=自动检测，True=强制C++，False=强制Python
     ):
         """
         初始化日志存储处理器
@@ -225,12 +230,14 @@ class LogStoreHandler(logging.Handler):
             level: 日志级别
             include_metadata: 是否包含上下文元数据（request_id, user_id等）
             include_exc_info: 是否包含异常信息
+            use_cpp: 是否使用 C++ 版本（None=自动，True=强制C++，False=强制Python）
         """
         super().__init__()
         self.log_store = log_store
         self.setLevel(level)
         self.include_metadata = include_metadata
         self.include_exc_info = include_exc_info
+        self.use_cpp = use_cpp
     
     def emit(self, record: logging.LogRecord):
         """
