@@ -7,26 +7,53 @@
 ```
 docs/
 ├── kernel/              # Kernel 层文档 - 基础能力
-│   ├── concurrency/     # 并发管理
-│   │   ├── watchdog.md
-│   │   └── task_manager.md
-│   ├── config/          # 配置系统
-│   ├── db/              # 📘 数据库模块（完整指南）
-│   │   ├── README.md         # 📌 概览与快速开始
-│   │   ├── CACHE_GUIDE.md    # 缓存系统完整指南
-│   │   ├── DATABASE_GUIDE.md # 数据库选择与配置
-│   │   ├── OPTIMIZATION_GUIDE.md # 优化与架构设计
-│   │   ├── core/             # 数据库核心模块
-│   │   ├── optimization/     # 缓存与优化
-│   │   └── api/              # CRUD 与查询 API
-│   ├── llm/             # LLM 请求系统
-│   │   ├── model_client/ # 模型客户端
-│   │   └── payload/     # 请求负载
-│   ├── logger/          # 日志系统
-│   ├── storage/         # 本地存储
-│   └── vector_db/       # 向量数据库
+│   ├── concurrency/     # 并发管理 ✅
+│   │   ├── watchdog.md                          # Watchdog 监控器
+│   │   ├── task_manager.md                      # TaskManager 管理器
+│   │   ├── QUICK_REFERENCE.md                   # 快速参考
+│   │   ├── TASK_MANAGER_QUICK_REFERENCE.md      # 任务管理快速参考
+│   │   ├── INTEGRATION_IMPROVEMENTS.md          # 集成改进报告
+│   │   └── TEST_RESULTS_REPORT.md               # 测试结果报告
+│   ├── config/          # 配置系统 ✅
+│   │   ├── README.md                            # 概览文档
+│   │   ├── API_REFERENCE.md                     # API 参考
+│   │   ├── QUICK_REFERENCE.md                   # 快速参考
+│   │   └── BEST_PRACTICES.md                    # 最佳实践
+│   ├── db/              # 数据库模块 ✅
+│   │   ├── README.md                            # 概览与快速开始
+│   │   ├── API_REFERENCE.md                     # API 参考
+│   │   ├── QUICK_REFERENCE.md                   # 快速参考
+│   │   ├── CACHE_GUIDE.md                       # 缓存系统指南
+│   │   ├── DATABASE_GUIDE.md                    # 数据库配置指南
+│   │   ├── OPTIMIZATION_GUIDE.md                # 优化与架构设计
+│   │   └── COMPLETION_SUMMARY.md                # 完成总结
+│   ├── llm/             # LLM 系统 ✅
+│   │   ├── README.md                            # 概览文档
+│   │   ├── API_REFERENCE.md                     # API 参考
+│   │   ├── QUICK_REFERENCE.md                   # 快速参考
+│   │   └── BEST_PRACTICES.md                    # 最佳实践
+│   ├── logger/          # 日志系统 ✅
+│   │   ├── README.md                            # 概览文档
+│   │   ├── API_REFERENCE.md                     # API 参考
+│   │   ├── QUICK_REFERENCE.md                   # 快速参考
+│   │   ├── CONFIGURATION_GUIDE.md               # 配置指南
+│   │   ├── BEST_PRACTICES.md                    # 最佳实践
+│   │   ├── TROUBLESHOOTING.md                   # 故障排查
+│   │   └── LOGGER_STORAGE_INTEGRATION.md        # 存储集成
+│   ├── storage/         # 本地存储 ✅
+│   │   ├── README.md                            # 概览文档
+│   │   ├── API_REFERENCE.md                     # API 参考
+│   │   ├── CONFIGURATION_GUIDE.md               # 配置指南
+│   │   ├── BEST_PRACTICES.md                    # 最佳实践
+│   │   └── TROUBLESHOOTING.md                   # 故障排查
+│   └── vector_db/       # 向量数据库 ✅
+│       ├── README.md                            # 概览文档
+│       ├── API_REFERENCE.md                     # API 参考
+│       ├── QUICK_REFERENCE.md                   # 快速参考
+│       ├── LOGGING_GUIDE.md                     # 日志集成指南
+│       └── BEST_PRACTICES.md                    # 最佳实践
 │
-└── core/                # Core 层文档 - 核心功能
+└── core/                # Core 层文档 - 核心功能 ⏳
     ├── components/      # 组件系统
     │   ├── base/        # 基础组件
     │   └── managers/    # 组件管理器
@@ -61,35 +88,57 @@ docs/
 
 ### Kernel 层（基础能力）
 
-#### 并发管理
-- [Watchdog 全局任务监控器](kernel/concurrency/watchdog.md) - 异步任务监控和管理
+#### 并发管理 (Concurrency)
+- [📘 Watchdog 全局任务监控器](kernel/concurrency/watchdog.md) - 异步任务监控和管理
+- [📘 TaskManager 任务管理器](kernel/concurrency/task_manager.md) - 异步任务生命周期管理
+- [📄 快速参考](kernel/concurrency/QUICK_REFERENCE.md) - 并发管理快速查阅手册
+- [📄 TaskManager 快速参考](kernel/concurrency/TASK_MANAGER_QUICK_REFERENCE.md) - 任务管理器速查手册
+- [📊 集成改进报告](kernel/concurrency/INTEGRATION_IMPROVEMENTS.md) - Watchdog 与 TaskManager 集成优化
+- [📊 测试报告](kernel/concurrency/TEST_RESULTS_REPORT.md) - 并发模块测试结果
 
-#### 配置系统
-- 配置项基类 - 待完善
-- 配置读取与更新 - 待完善
+#### 配置系统 (Config)
+- [📘 README](kernel/config/README.md) - 配置系统概览
+- [📄 API 参考](kernel/config/API_REFERENCE.md) - 配置系统 API 完整文档
+- [📄 快速参考](kernel/config/QUICK_REFERENCE.md) - 配置系统快速查阅手册
+- [💡 最佳实践](kernel/config/BEST_PRACTICES.md) - 配置系统使用最佳实践
 
-#### 数据库模块
-- 数据库引擎 - 待完善
-- 会话管理 - 待完善
-- 多级缓存 - 待完善
-- CRUD API - 待完善
+#### 数据库模块 (Database)
+- [📘 README](kernel/db/README.md) - 数据库模块概览与快速开始
+- [📄 API 参考](kernel/db/API_REFERENCE.md) - 数据库 API 完整文档
+- [📄 快速参考](kernel/db/QUICK_REFERENCE.md) - 数据库快速查阅手册
+- [📖 缓存指南](kernel/db/CACHE_GUIDE.md) - 缓存系统完整指南
+- [📖 数据库指南](kernel/db/DATABASE_GUIDE.md) - 数据库选择与配置指南
+- [📖 优化指南](kernel/db/OPTIMIZATION_GUIDE.md) - 性能优化与架构设计
+- [✅ 完成总结](kernel/db/COMPLETION_SUMMARY.md) - 数据库模块实现总结
 
-#### LLM 系统
-- LLM 请求核心 - 待完善
-- 客户端注册 - 待完善
-- 标准负载构建 - 待完善
+#### LLM 系统 (Large Language Model)
+- [📘 README](kernel/llm/README.md) - LLM 系统概览
+- [📄 API 参考](kernel/llm/API_REFERENCE.md) - LLM API 完整文档
+- [📄 快速参考](kernel/llm/QUICK_REFERENCE.md) - LLM 快速查阅手册
+- [💡 最佳实践](kernel/llm/BEST_PRACTICES.md) - LLM 使用最佳实践
 
-#### 日志系统
-- 日志核心 - 待完善
-- 日志处理器 - 待完善
-- 日志清理 - 待完善
+#### 日志系统 (Logger)
+- [📘 README](kernel/logger/README.md) - 日志系统概览
+- [📄 API 参考](kernel/logger/API_REFERENCE.md) - 日志系统 API 完整文档
+- [📄 快速参考](kernel/logger/QUICK_REFERENCE.md) - 日志系统快速查阅手册
+- [📖 配置指南](kernel/logger/CONFIGURATION_GUIDE.md) - 日志系统配置详解
+- [💡 最佳实践](kernel/logger/BEST_PRACTICES.md) - 日志系统使用最佳实践
+- [🔧 故障排查](kernel/logger/TROUBLESHOOTING.md) - 日志系统常见问题解决
+- [📊 存储集成](kernel/logger/LOGGER_STORAGE_INTEGRATION.md) - 日志与存储系统集成
 
-#### 存储系统
-- JSON 持久化 - 待完善
+#### 存储系统 (Storage)
+- [📘 README](kernel/storage/README.md) - 存储系统概览
+- [📄 API 参考](kernel/storage/API_REFERENCE.md) - 存储系统 API 完整文档
+- [📖 配置指南](kernel/storage/CONFIGURATION_GUIDE.md) - 存储系统配置详解
+- [💡 最佳实践](kernel/storage/BEST_PRACTICES.md) - 存储系统使用最佳实践
+- [🔧 故障排查](kernel/storage/TROUBLESHOOTING.md) - 存储系统常见问题解决
 
-#### 向量数据库
-- 向量存储抽象 - 待完善
-- ChromaDB 实现 - 待完善
+#### 向量数据库 (Vector Database)
+- [📘 README](kernel/vector_db/README.md) - 向量数据库概览
+- [📄 API 参考](kernel/vector_db/API_REFERENCE.md) - 向量数据库 API 完整文档
+- [📄 快速参考](kernel/vector_db/QUICK_REFERENCE.md) - 向量数据库快速查阅手册
+- [📖 日志指南](kernel/vector_db/LOGGING_GUIDE.md) - 向量数据库日志集成指南
+- [💡 最佳实践](kernel/vector_db/BEST_PRACTICES.md) - 向量数据库使用最佳实践
 
 ### Core 层（核心功能）
 
@@ -182,21 +231,67 @@ import asyncio
 ## 📊 文档完成度
 
 ### Kernel 层
-- [x] concurrency/watchdog.py - 已完成
-- [ ] concurrency/task_manager.py
-- [ ] config/*
-- [ ] db/*
-- [ ] llm/*
-- [ ] logger/*
-- [ ] storage/*
-- [ ] vector_db/*
+- [x] **concurrency/** - 并发管理模块（已完成）
+  - [x] watchdog.md - 全局任务监控器
+  - [x] task_manager.md - 任务管理器
+  - [x] QUICK_REFERENCE.md - 快速参考
+  - [x] TASK_MANAGER_QUICK_REFERENCE.md - 任务管理器快速参考
+  - [x] 测试与集成报告
+  
+- [x] **config/** - 配置系统（已完成）
+  - [x] README.md - 概览文档
+  - [x] API_REFERENCE.md - API 参考
+  - [x] QUICK_REFERENCE.md - 快速参考
+  - [x] BEST_PRACTICES.md - 最佳实践
+  
+- [x] **db/** - 数据库模块（已完成）
+  - [x] README.md - 概览文档
+  - [x] API_REFERENCE.md - API 参考
+  - [x] QUICK_REFERENCE.md - 快速参考
+  - [x] CACHE_GUIDE.md - 缓存指南
+  - [x] DATABASE_GUIDE.md - 数据库指南
+  - [x] OPTIMIZATION_GUIDE.md - 优化指南
+  
+- [x] **llm/** - LLM 系统（已完成）
+  - [x] README.md - 概览文档
+  - [x] API_REFERENCE.md - API 参考
+  - [x] QUICK_REFERENCE.md - 快速参考
+  - [x] BEST_PRACTICES.md - 最佳实践
+  
+- [x] **logger/** - 日志系统（已完成）
+  - [x] README.md - 概览文档
+  - [x] API_REFERENCE.md - API 参考
+  - [x] QUICK_REFERENCE.md - 快速参考
+  - [x] CONFIGURATION_GUIDE.md - 配置指南
+  - [x] BEST_PRACTICES.md - 最佳实践
+  - [x] TROUBLESHOOTING.md - 故障排查
+  - [x] LOGGER_STORAGE_INTEGRATION.md - 存储集成
+  
+- [x] **storage/** - 存储系统（已完成）
+  - [x] README.md - 概览文档
+  - [x] API_REFERENCE.md - API 参考
+  - [x] CONFIGURATION_GUIDE.md - 配置指南
+  - [x] BEST_PRACTICES.md - 最佳实践
+  - [x] TROUBLESHOOTING.md - 故障排查
+  
+- [x] **vector_db/** - 向量数据库（已完成）
+  - [x] README.md - 概览文档
+  - [x] API_REFERENCE.md - API 参考
+  - [x] QUICK_REFERENCE.md - 快速参考
+  - [x] LOGGING_GUIDE.md - 日志指南
+  - [x] BEST_PRACTICES.md - 最佳实践
 
 ### Core 层
-- [ ] components/*
-- [ ] models/*
-- [ ] perception/*
-- [ ] prompt/*
-- [ ] transport/*
+- [ ] components/* - 组件系统（待完善）
+- [ ] models/* - 数据模型（待完善）
+- [ ] perception/* - 感知学习（待完善）
+- [ ] prompt/* - Prompt 系统（待完善）
+- [ ] transport/* - 通讯传输（待完善）
+
+### 📈 完成统计
+- **Kernel 层**: 7/7 模块已完成 ✅ (100%)
+- **Core 层**: 0/5 模块已完成 ⏳ (0%)
+- **总体进度**: 7/12 模块已完成 (58%)
 
 ---
 

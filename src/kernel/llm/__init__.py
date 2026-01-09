@@ -99,6 +99,15 @@ from .utils import (
     truncate_text
 )
 
+# 视频处理（inkfox）
+from .video_utils import (
+    VideoKeyframeExtractor,
+    extract_keyframes_from_video,
+    get_system_info,
+    check_inkfox_available,
+    INKFOX_AVAILABLE
+)
+
 
 __all__ = [
     # Base Client
@@ -184,6 +193,13 @@ __all__ = [
     "create_data_url",
     "estimate_tokens",
     "truncate_text",
+    
+    # Video Utils (inkfox)
+    "VideoKeyframeExtractor",
+    "extract_keyframes_from_video",
+    "get_system_info",
+    "check_inkfox_available",
+    "INKFOX_AVAILABLE",
 ]
 
 

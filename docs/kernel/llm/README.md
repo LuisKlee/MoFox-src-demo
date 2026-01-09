@@ -9,6 +9,7 @@ MoFox LLM 模块提供统一的大语言模型交互接口，支持多个主流 
 - [快速参考](QUICK_REFERENCE.md) - 常用功能速查
 - [提示词指南](PROMPT_GUIDE.md) - 提示词工程最佳实践
 - [工具调用指南](TOOL_CALLING_GUIDE.md) - Function Calling 完整指南
+- [inkfox 集成指南](INKFOX_INTEGRATION.md) - 视频关键帧提取功能
 
 ## 🎯 核心特性
 
@@ -36,6 +37,7 @@ response = await generate(
 - ✅ 异步支持
 - ✅ 自动重试
 - ✅ 日志集成
+- ✅ 视频关键帧提取（inkfox）
 
 ## 🚀 快速开始
 
@@ -46,6 +48,7 @@ response = await generate(
 pip install openai aiohttp boto3
 
 # 可选依赖
+pip install inkfox  # 视频关键帧提取（需要 Python >= 3.11）
 pip install pillow  # 图像处理
 ```
 
