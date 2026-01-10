@@ -1,6 +1,8 @@
 """
-In-memory vector DB fallback used when optional backends are unavailable.
-Implements minimal functionality required by tests without external deps.
+内存向量数据库备用实现
+
+当可选后端不可用时使用的内存向量数据库。
+实现测试所需的最小功能，无需外部依赖。
 """
 from __future__ import annotations
 
@@ -12,7 +14,7 @@ from .base import VectorDBBase, VectorDocument, QueryResult, CollectionInfo
 
 
 class InMemoryVectorDB(VectorDBBase):
-    """Lightweight vector store for testing when real backends are missing."""
+    """轻量级向量存储，用于真实后端缺失时的测试"""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
@@ -21,12 +23,12 @@ class InMemoryVectorDB(VectorDBBase):
 
     async def initialize(self) -> None:
         self._initialized = True
-        self.logger.info("InMemoryVectorDB initialized")
+        self.logger.info("InMemoryVectorDB 已初始化")
 
     async def close(self) -> None:
         self._collections.clear()
         self._initialized = False
-        self.logger.info("InMemoryVectorDB closed")
+        self.logger.info("InMemoryVectorDB 已关闭")
 
     async def create_collection(
         self,
