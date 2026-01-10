@@ -101,6 +101,8 @@ class MoFoxKernel:
         config_path: Optional[str] = None,
         log_dir: str = "logs",
         data_dir: str = "data",
+        enable_task_manager: bool = True,
+        enable_watchdog: bool = True,
         **kwargs
     ):
         """
@@ -118,6 +120,8 @@ class MoFoxKernel:
         self.log_dir = log_dir
         self.data_dir = data_dir
         self.extra_config = kwargs
+        self.enable_task_manager = enable_task_manager
+        self.enable_watchdog = enable_watchdog
         
         # 各模块管理器
         self._config: Optional[Config] = None
@@ -165,8 +169,14 @@ class MoFoxKernel:
     
     async def _init_task_manager(self):
         """初始化任务管理器"""
+        if not self.enable_task_manager:
+            self._logger.info("TaskManager 已禁用，跳过初始化")
+            return
         max_tasks = self._config.get("max_concurrent_tasks", 10) if self._config else 10
-        self._task_manager = get_task_manager(max_concurrent_tasks=max_tasks)
+        self._task_manager = get_task_manager(
+            max_concurrent_tasks=max_tasks,
+            enable_watchdog=self.enable_watchdog
+        )
         await self._task_manager.start()
     
     async def shutdown(self):

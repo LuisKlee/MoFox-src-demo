@@ -95,8 +95,8 @@ async def test_timeout_handling_marks_and_cancels_task(watchdog):
     task_info = watchdog.get_task_info(task_id)
     assert task_info is not None
     assert watchdog._stats["total_timeout"] == 1
-    assert task_info.status is TaskStatus.CANCELLED
-    assert task.cancelled()
+    # Watchdog标记为超时，不自动取消任务（由TaskManager决定）
+    assert task_info.status is TaskStatus.TIMEOUT
 
     await watchdog.stop()
 

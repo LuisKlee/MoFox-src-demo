@@ -8,15 +8,17 @@ import asyncio
 from typing import List, Dict, Any, Optional, Union, TYPE_CHECKING
 from pathlib import Path
 
-# 仅在类型检查时导入具体类型，运行时使用 Any 兼容占位
-if TYPE_CHECKING:
+# 在运行时尝试导入 chromadb，可选依赖
+try:
     import chromadb  # type: ignore
     from chromadb.config import Settings  # type: ignore
     from chromadb.api.models.Collection import Collection  # type: ignore
-else:
+    CHROMADB_AVAILABLE = True
+except ImportError:
     chromadb = None  # type: ignore
     Settings = Any  # type: ignore
     Collection = Any  # type: ignore
+    CHROMADB_AVAILABLE = False
 
 from .base import (
     VectorDBBase,

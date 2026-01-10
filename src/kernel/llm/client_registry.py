@@ -296,6 +296,12 @@ def register_client(
     registry.register(name, client_class, override)
 
 
+def unregister_client(name: str) -> None:
+    """从全局注册器注销客户端并清理缓存实例"""
+    registry = get_registry()
+    registry.unregister(name)
+
+
 def create_client(
     name: str,
     api_key: Optional[str] = None,
@@ -319,6 +325,16 @@ def create_client(
     """
     registry = get_registry()
     return registry.create_client(name, api_key, config, cache)
+
+
+def get_client(
+    name: str,
+    api_key: Optional[str] = None,
+    config: Optional[Dict[str, Any]] = None,
+    cache: bool = True
+) -> BaseLLMClient:
+    """与 create_client 等价，保持向后兼容接口"""
+    return create_client(name, api_key, config, cache)
 
 
 async def create_client_async(

@@ -20,6 +20,7 @@ class EngineConfig:
     SQLite engine configuration supporting both file-based and in-memory databases."""
 
     database: str
+    dialect: str = "sqlite"
     echo: bool = False
     pool_size: int = 10
     pool_timeout: int = 30

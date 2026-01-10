@@ -40,6 +40,7 @@ from .exceptions import (
     APIConnectionError,
     ContextLengthExceededError,
     InvalidResponseError,
+    ValidationError,
     TimeoutError as LLMTimeoutError,
     StreamError
 )

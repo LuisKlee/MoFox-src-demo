@@ -123,6 +123,16 @@ class ResponseParseError(LLMError):
     pass
 
 
+class InvalidResponseError(LLMError):
+    """响应格式或内容不合法时抛出"""
+    pass
+
+
+class ValidationError(LLMError):
+    """请求参数验证失败时抛出"""
+    pass
+
+
 class StreamError(LLMError):
     """流式响应错误异常
     

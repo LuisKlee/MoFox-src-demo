@@ -19,16 +19,19 @@ from .base import (
 )
 
 # 导出具体实现
-from .chromadb_impl import ChromaDBImpl
-
+from .chromadb_impl import ChromaDBImpl, CHROMADB_AVAILABLE
+from .memory_impl import InMemoryVectorDB
 
 # 支持的向量数据库类型
 VectorDBType = Literal['chromadb']
 
 # 向量数据库实现映射
 _VECTOR_DB_REGISTRY: Dict[str, type] = {
-    'chromadb': ChromaDBImpl,
+    'chromadb': ChromaDBImpl if CHROMADB_AVAILABLE else InMemoryVectorDB,
 }
+
+if not CHROMADB_AVAILABLE:
+    logger.warning("ChromaDB not installed; using in-memory vector DB fallback for 'chromadb'")
 
 
 def create_vector_db(

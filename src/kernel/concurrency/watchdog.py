@@ -344,16 +344,21 @@ class Watchdog:
         tasks_to_handle = []
         
         for task_id, task_info in list(self._tasks.items()):
-            # 检查超时
-            if (self.enable_timeout_check and 
-                task_info.is_alive and 
-                task_info.is_timeout):
+            # 检查超时（只处理一次超时事件，避免重复计数）
+            if (
+                self.enable_timeout_check
+                and task_info.is_alive
+                and task_info.is_timeout
+                and task_info.status != TaskStatus.TIMEOUT
+            ):
                 tasks_to_handle.append((task_id, task_info, 'timeout'))
             
             # 清理已完成的任务（保留一段时间后清理）
-            elif (not task_info.is_alive and 
-                  task_info.end_time and 
-                  current_time - task_info.end_time > 60):
+            elif (
+                not task_info.is_alive
+                and task_info.end_time
+                and current_time - task_info.end_time > 60
+            ):
                 tasks_to_handle.append((task_id, task_info, 'cleanup'))
         
         # 处理需要处理的任务
