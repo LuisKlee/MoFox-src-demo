@@ -6,27 +6,39 @@ LLM 工具函数
 
 import base64
 import io
-from typing import Union, Tuple
 from pathlib import Path
+from typing import Any, Tuple, Union
+
 from PIL import Image
 from kernel.logger import get_logger
 
 logger = get_logger(__name__)
 
 
+def _load_image(image_source: Union[str, Path, bytes, bytearray, memoryview, Image.Image]) -> Image.Image:
+    """将多种图片输入统一加载为 PIL Image。"""
+    if isinstance(image_source, Image.Image):
+        return image_source
+    if isinstance(image_source, (str, Path)):
+        return Image.open(image_source)
+    if isinstance(image_source, (bytes, bytearray, memoryview)):
+        return Image.open(io.BytesIO(image_source))
+    raise ValueError(f"Unsupported image source type: {type(image_source)}")
+
+
 def compress_image(
-    image_source: Union[str, Path, bytes, Image.Image],
+    image_source: Union[str, Path, bytes, bytearray, memoryview, Image.Image],
     max_size: Tuple[int, int] = (1024, 1024),
     quality: int = 85,
-    format: str = 'JPEG'
+    image_format: str = 'JPEG'
 ) -> bytes:
     """压缩图片
     
     Args:
-        image_source: 图片源（文件路径、字节数据或PIL Image对象）
+        image_source: 图片源（文件路径、字节数据或 PIL Image 对象）
         max_size: 最大尺寸 (width, height)
-        quality: JPEG质量 (1-100)
-        format: 输出格式 ('JPEG', 'PNG', 'WEBP')
+        quality: JPEG 质量 (1-100)
+        image_format: 输出格式 ('JPEG', 'PNG', 'WEBP')
         
     Returns:
         bytes: 压缩后的图片字节数据
@@ -36,19 +48,10 @@ def compress_image(
         IOError: 图片处理失败
     """
     try:
-        # 加载图片
-        if isinstance(image_source, (str, Path)):
-            img = Image.open(image_source)
-        elif isinstance(image_source, bytes):
-            img = Image.open(io.BytesIO(image_source))
-        elif isinstance(image_source, Image.Image):
-            img = image_source
-        else:
-            raise ValueError(f"Unsupported image source type: {type(image_source)}")
-        
+        img = _load_image(image_source)
+
         # 转换为 RGB（JPEG 不支持透明度）
-        if format.upper() == 'JPEG' and img.mode in ('RGBA', 'LA', 'P'):
-            # 创建白色背景
+        if image_format.upper() == 'JPEG' and img.mode in ('RGBA', 'LA', 'P'):
             background = Image.new('RGB', img.size, (255, 255, 255))
             if img.mode == 'P':
                 img = img.convert('RGBA')
@@ -60,37 +63,38 @@ def compress_image(
         
         # 保存到字节流
         output = io.BytesIO()
-        save_kwargs = {'format': format.upper()}
+        save_kwargs: dict[str, Any] = {'format': image_format.upper()}
         
-        if format.upper() == 'JPEG':
+        if image_format.upper() == 'JPEG':
             save_kwargs['quality'] = quality
             save_kwargs['optimize'] = True
-        elif format.upper() == 'PNG':
+        elif image_format.upper() == 'PNG':
             save_kwargs['optimize'] = True
-        elif format.upper() == 'WEBP':
+        elif image_format.upper() == 'WEBP':
             save_kwargs['quality'] = quality
         
         img.save(output, **save_kwargs)
         compressed_data = output.getvalue()
         
         logger.debug(
-            f"图片压缩完成: 原始尺寸={img.size}, "
-            f"压缩后大小={len(compressed_data)} bytes"
+            "图片压缩完成: 原始尺寸=%s, 压缩后大小=%s bytes",
+            img.size,
+            len(compressed_data),
         )
         
         return compressed_data
         
     except Exception as e:
-        logger.error(f"图片压缩失败: {e}")
-        raise IOError(f"Failed to compress image: {e}")
+        logger.error("图片压缩失败: %s", e)
+        raise IOError(f"Failed to compress image: {e}") from e
 
 
 def image_to_base64(
-    image_source: Union[str, Path, bytes, Image.Image],
+    image_source: Union[str, Path, bytes, bytearray, memoryview, Image.Image],
     compress: bool = True,
     max_size: Tuple[int, int] = (1024, 1024),
     quality: int = 85,
-    format: str = 'JPEG'
+    image_format: str = 'JPEG'
 ) -> str:
     """将图片转换为 Base64 编码字符串
     
@@ -107,17 +111,17 @@ def image_to_base64(
     try:
         # 如果需要压缩
         if compress:
-            image_bytes = compress_image(image_source, max_size, quality, format)
+            image_bytes = compress_image(image_source, max_size, quality, image_format)
         else:
             # 直接读取字节
-            if isinstance(image_source, bytes):
-                image_bytes = image_source
+            if isinstance(image_source, (bytes, bytearray, memoryview)):
+                image_bytes = bytes(image_source)
             elif isinstance(image_source, (str, Path)):
                 with open(image_source, 'rb') as f:
                     image_bytes = f.read()
             elif isinstance(image_source, Image.Image):
                 output = io.BytesIO()
-                image_source.save(output, format=format)
+                image_source.save(output, format=image_format)
                 image_bytes = output.getvalue()
             else:
                 raise ValueError(f"Unsupported image source type: {type(image_source)}")
@@ -125,12 +129,12 @@ def image_to_base64(
         # 编码为 Base64
         base64_str = base64.b64encode(image_bytes).decode('utf-8')
         
-        logger.debug(f"图片转换为 Base64: 长度={len(base64_str)}")
+        logger.debug("图片转换为 Base64: 长度=%s", len(base64_str))
         
         return base64_str
         
     except Exception as e:
-        logger.error(f"图片转 Base64 失败: {e}")
+        logger.error("图片转 Base64 失败: %s", e)
         raise
 
 
@@ -152,24 +156,17 @@ def base64_to_image(base64_str: str) -> Image.Image:
         image_bytes = base64.b64decode(base64_str)
         img = Image.open(io.BytesIO(image_bytes))
         
-        logger.debug(f"Base64 转换为图片: 尺寸={img.size}, 模式={img.mode}")
+        logger.debug("Base64 转换为图片: 尺寸=%s, 模式=%s", img.size, img.mode)
         
         return img
         
     except Exception as e:
-        logger.error(f"Base64 转图片失败: {e}")
-        raise ValueError(f"Failed to decode base64 image: {e}")
+        logger.error("Base64 转图片失败: %s", e)
+        raise ValueError(f"Failed to decode base64 image: {e}") from e
 
 
-def get_image_mime_type(format: str) -> str:
-    """获取图片格式对应的 MIME 类型
-    
-    Args:
-        format: 图片格式 ('JPEG', 'PNG', 'WEBP', 'GIF')
-        
-    Returns:
-        str: MIME 类型
-    """
+def get_image_mime_type(image_format: str) -> str:
+    """获取图片格式对应的 MIME 类型"""
     mime_types = {
         'JPEG': 'image/jpeg',
         'JPG': 'image/jpeg',
@@ -178,13 +175,13 @@ def get_image_mime_type(format: str) -> str:
         'GIF': 'image/gif',
         'BMP': 'image/bmp'
     }
-    return mime_types.get(format.upper(), 'image/jpeg')
+    return mime_types.get(image_format.upper(), 'image/jpeg')
 
 
 def create_data_url(
-    image_source: Union[str, Path, bytes, Image.Image],
+    image_source: Union[str, Path, bytes, bytearray, memoryview, Image.Image],
     compress: bool = True,
-    format: str = 'JPEG',
+    image_format: str = 'JPEG',
     **compress_kwargs
 ) -> str:
     """创建 data URL 格式的图片字符串
@@ -192,7 +189,7 @@ def create_data_url(
     Args:
         image_source: 图片源
         compress: 是否压缩
-        format: 图片格式
+        image_format: 图片格式
         **compress_kwargs: 压缩参数
         
     Returns:
@@ -201,11 +198,11 @@ def create_data_url(
     base64_str = image_to_base64(
         image_source,
         compress=compress,
-        format=format,
+        image_format=image_format,
         **compress_kwargs
     )
     
-    mime_type = get_image_mime_type(format)
+    mime_type = get_image_mime_type(image_format)
     data_url = f"data:{mime_type};base64,{base64_str}"
     
     return data_url
@@ -292,8 +289,9 @@ def format_file_size(size_bytes: int) -> str:
     Returns:
         str: 格式化后的字符串 (如 '1.5 MB')
     """
+    size = float(size_bytes)
     for unit in ['B', 'KB', 'MB', 'GB']:
-        if size_bytes < 1024.0:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.1f} TB"
+        if size < 1024.0:
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} TB"

@@ -71,6 +71,9 @@ websockets>=12.0
 pandas>=2.1.0
 numpy>=1.26.0
 
+# 图像处理
+pillow>=10.0.0
+
 # JSON Schema
 jsonschema>=4.20.0
 
